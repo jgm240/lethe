@@ -29,6 +29,7 @@
 <body><div class="layout">
 <nav><h1>Settings</h1>
   <button data-s="general" class="on">General</button><button data-s="appearance">Appearance</button><button data-s="privacy">Privacy</button>
+  <button data-s="forget">Eject &amp; Forget</button><button data-s="filters">Filters</button><button data-s="sites">Site rules</button>
   <button data-s="content">Content &amp; Location</button>
   <button data-s="player">Lethe Player</button><button data-s="data">Data</button><button data-s="about">About</button></nav>
 <main>
@@ -45,6 +46,7 @@
     <div class="custom" id="custom">
       <label>Accent<input type="color" data-c="accent"></label><label>Toolbar<input type="color" data-c="bar"></label><label>Tab strip<input type="color" data-c="bg"></label>
     </div></div>
+  <h2>Tabs</h2><div class="card"><div class="row"><div class="txt"><div class="t">Tab layout</div><div class="d">Tabs across the top, or a sidebar down the left. Right-click a tab to pin it or add it to a group. You can also switch from the ⋯ menu or the command palette (Cmd/Ctrl+K).</div></div><select id="tabLayout"><option value="horizontal">Horizontal</option><option value="vertical">Vertical sidebar</option></select></div></div>
   <h2>New Tab page</h2><div class="card"><div class="bgs" id="bgs"></div>
     <div class="row"><div class="txt"><div class="t">Show favorites</div><div class="d">Starred bookmarks appear under the search box.</div></div><label class="switch"><input type="checkbox" data-k="appearance.showFavorites"><span></span></label></div></div>
 </section>
@@ -58,12 +60,53 @@
     <div class="row"><div class="txt"><div class="t">Cookie pop-up manager</div><div class="d">Automatically picks “reject” or “necessary only” on cookie banners when it can, and never accepts.</div></div><label class="switch"><input type="checkbox" data-k="privacy.cookiePopups"><span></span></label></div>
     <div class="row"><div class="txt"><div class="t">Save browsing history</div><div class="d">Stored on this device only.</div></div><label class="switch"><input type="checkbox" data-k="privacy.saveHistory"><span></span></label></div>
   </div>
-  <h2>Fire Button</h2><div class="card">
-    <div class="row"><div class="txt"><div class="t">Burn data when Lethe closes</div><div class="d">Automatically erases history, cookies and site data on quit.</div></div><label class="switch"><input type="checkbox" data-k="privacy.fireOnExit"><span></span></label></div>
-    <div class="row"><div class="txt"><div class="t">Burn everything now</div><div class="d">Closes all tabs and erases data (fireproof sites keep their cookies).</div></div><button class="btn danger" id="burn">Burn…</button></div>
+  <h2>Eject to Lethe</h2><div class="card">
+    <div class="row"><div class="txt"><div class="t">Eject when Lethe closes</div><div class="d">Automatically erases history, cookies and site data on quit.</div></div><label class="switch"><input type="checkbox" data-k="privacy.fireOnExit"><span></span></label></div>
+    <div class="row"><div class="txt"><div class="t">Eject now</div><div class="d">Closes all tabs and erases data (fireproof sites keep their cookies). The ⋯ button next to the address bar has quicker options, such as forgetting only the last hour.</div></div><button class="btn danger" id="burn">Eject…</button></div>
   </div>
-  <h2>Fireproof sites</h2><div class="card"><div class="row"><div class="txt"><div class="d" style="margin:0 0 6px">These sites keep their cookies (so you stay signed in) when you use the Fire Button. Add one from the shield menu.</div><div id="fp"></div></div></div></div>
+  <h2>Fireproof sites</h2><div class="card"><div class="row"><div class="txt"><div class="d" style="margin:0 0 6px">These sites keep their cookies (so you stay signed in) when you use the Eject to Lethe. Add one from the shield menu.</div><div id="fp"></div></div></div></div>
   <h2>Sites with protections off</h2><div class="card"><div class="row"><div class="txt"><div id="up"></div></div></div></div>
+</section>
+<section id="forget"><h1>Eject &amp; Forget</h1>
+  <div class="card">
+    <div class="row"><div class="txt"><div class="t">Ask before ejecting</div><div class="d">Show a confirmation before anything is erased.</div></div><label class="switch"><input type="checkbox" data-k="eject.confirm"><span></span></label></div>
+    <div class="row"><div class="txt"><div class="t">River animation</div><div class="d">Scrolls are thrown into the river of forgetting when you eject everything.</div></div><label class="switch"><input type="checkbox" data-k="eject.animation"><span></span></label></div>
+    <div class="row"><div class="txt"><div class="t">Eject or forget now</div><div class="d">“Eject to Lethe” closes every tab and erases everything. The other two erase the sites you visited in that window (cookies, site data and history), skipping fireproof sites.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn" id="fhour">Last hour</button><button class="btn" id="fday">Last day</button><button class="btn danger" id="ejectNow">Eject to Lethe…</button></div></div>
+  </div>
+  <h2>Auto-forget</h2>
+  <div class="card">
+    <div class="row"><div class="txt"><div class="t">Forget sites I haven't visited for…</div><div class="d">Sites that have sat untouched this long are forgotten automatically (never one that is open or fireproof). Lethe remembers only <i>which sites</i> you visited, never pages, to be able to do this.</div></div><select id="afterHours"><option value="0">Never</option><option value="1">1 hour</option><option value="6">6 hours</option><option value="24">1 day</option><option value="168">7 days</option></select></div>
+    <div class="row" style="display:block"><div class="t">Forget when the tab closes</div><div class="d" style="margin:3px 0 8px">These sites lose their cookies and data as soon as no tab is showing them. You can also switch this on from the shield menu.</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px"><input type="text" id="closeSite" placeholder="example.com" size="28"><button class="btn" id="closeAdd">Add</button></div><div id="closeList"></div></div>
+  </div>
+  <h2>Privacy report</h2>
+  <div class="card"><div class="row"><div class="txt"><div class="t">Count what Lethe blocks</div><div class="d">Keeps per-day counts of blocked trackers and protections on this device (never the sites you visit). Powers the weekly Privacy Report.</div></div><label class="switch"><input type="checkbox" data-k="stats.enabled"><span></span></label></div>
+    <div class="row"><div class="txt"><div class="t">Open the report</div></div><a class="btn" href="lethe://report">Privacy Report</a></div></div>
+</section>
+<section id="filters"><h1>Filters</h1>
+  <h2>Filter lists</h2>
+  <div class="card">
+    <div class="row" style="display:block"><div class="t">Add a list</div><div class="d" style="margin:3px 0 10px">Lethe understands a practical subset of the common Adblock list format: domain and path rules, third-party and resource-type options, and element-hiding rules. Unsupported rules are skipped. Lists are downloaded over HTTPS from the address you give, stored on this device, and re-checked weekly. They're third-party works with their own licences.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="addEP">Add EasyPrivacy</button><button class="btn" id="addEL">Add EasyList</button></div>
+      <div style="display:flex;gap:8px"><input type="text" id="listUrl" placeholder="https://example.org/list.txt" style="flex:1"><button class="btn primary" id="listAdd">Add list</button></div><div class="d" id="listMsg" style="margin-top:8px"></div></div>
+    <div id="lists"></div>
+    <div class="row"><div class="txt"><div class="t">Update lists now</div></div><button class="btn" id="listUpdate">Update</button></div>
+  </div>
+  <h2>Hidden page elements</h2>
+  <div class="card"><div class="row" style="display:block"><div class="d" style="margin-bottom:8px">Things you hid with “Zap Element…” (⋯ menu, or Cmd/Ctrl+Shift+X).</div><div id="zaps"></div></div></div>
+</section>
+<section id="sites"><h1>Site rules</h1>
+  <div class="card">
+    <div class="row"><div class="txt"><div class="t">Rule for one website</div><div class="d">Override your global settings for a single site. “Inherit” keeps following the global setting. User agent and location are sent before the page loads.</div></div></div>
+    <div class="row"><div class="txt"><div class="t">Site</div></div><input type="text" id="ruleSite" placeholder="example.com" size="26"></div>
+    <div class="row"><div class="txt"><div class="t">User agent</div></div><select id="ruleUa"></select></div>
+    <div class="row"><div class="txt"><div class="t">Location</div></div><select id="ruleLoc"></select></div>
+    <div class="row"><div class="txt"><div class="t">JavaScript blocked</div></div><select id="ruleJs"><option value="">Inherit</option><option value="on">Block</option><option value="off">Allow</option></select></div>
+    <div class="row"><div class="txt"><div class="t">CSS blocked</div></div><select id="ruleCss"><option value="">Inherit</option><option value="on">Block</option><option value="off">Allow</option></select></div>
+    <div class="row"><div class="txt"><div class="t">Images blocked</div></div><select id="ruleImg"><option value="">Inherit</option><option value="on">Block</option><option value="off">Allow</option></select></div>
+    <div class="row"><div class="txt"><div class="d" id="ruleMsg"></div></div><div style="display:flex;gap:8px"><button class="btn danger" id="ruleDelete">Remove rule</button><button class="btn primary" id="ruleSave">Save rule</button></div></div>
+  </div>
+  <h2>Your site rules</h2><div class="card"><div id="rules"></div></div>
 </section>
 <section id="content"><h1>Content &amp; Location</h1>
   <h2>Page content</h2>
@@ -107,7 +150,7 @@
 <section id="about"><h1>About</h1>
   <div class="card"><div class="row"><div class="txt"><div class="t">Lethe <span class="muted" id="ver"></span></div><div class="d">Λήθη — forget instantly.</div></div></div></div>
   <h2>What's inside</h2>
-  <ul class="feat"><li>Tracker blocking</li><li>Smarter HTTPS upgrades</li><li>Global Privacy Control</li><li>Third-party cookie blocking</li><li>Link tracking protection</li><li>Cookie pop-up manager</li><li>Fire Button + fireproof sites</li><li>Clear on exit</li><li>Lethe Player for YouTube</li><li>Per-site protection toggle</li><li>Themes + custom colors</li><li>Search suggestions</li><li>Bookmarks, history, downloads</li><li>Reopen closed tab</li></ul>
+  <ul class="feat"><li>Tracker blocking</li><li>Smarter HTTPS upgrades</li><li>Global Privacy Control</li><li>Third-party cookie blocking</li><li>Link tracking protection</li><li>Cookie pop-up manager</li><li>Eject to Lethe + fireproof sites</li><li>Clear on exit</li><li>Lethe Player for YouTube</li><li>Per-site protection toggle</li><li>Themes + custom colors</li><li>Search suggestions</li><li>Bookmarks, history, downloads</li><li>Reopen closed tab</li></ul>
 </section>
 </main></div>
 <script src="common.js"></script><script src="leaflet.js"></script><script src="settings.js"></script></body></html>

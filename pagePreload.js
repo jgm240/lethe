@@ -12,11 +12,11 @@ if (origin && location.origin === origin) {
 // When a non-default user agent is chosen, keep the other navigator fields consistent with it.
 if (/^https?:$/.test(location.protocol)) {
   let info = null;
-  try { info = ipcRenderer.sendSync('lethe:uaInfo'); } catch { /* ignore */ }
+  try { info = ipcRenderer.sendSync('lethe:uaInfo', location.hostname); } catch { /* ignore */ }
   if (info) {
     const def = (k, v) => `Object.defineProperty(Navigator.prototype,${JSON.stringify(k)},{get:()=>${JSON.stringify(v)},configurable:true});`;
     webFrame.executeJavaScript(
-      def('platform', info.platform) + def('vendor', info.vendor) + def('appVersion', info.ua.replace(/^Mozilla\//, '')) +
+      def('userAgent', info.ua) + def('platform', info.platform) + def('vendor', info.vendor) + def('appVersion', info.ua.replace(/^Mozilla\//, '')) +
       (info.hideCH ? 'Object.defineProperty(Navigator.prototype,"userAgentData",{get:()=>undefined,configurable:true});' : '') +
       (info.chromeMajor ? `(()=>{const V=${JSON.stringify(String(info.chromeMajor))},P=${JSON.stringify(info.chPlatform)},M=${!!info.mobile};const brands=[{brand:"Chromium",version:V},{brand:"Google Chrome",version:V},{brand:"Not_A Brand",version:"24"}];const d={brands,mobile:M,platform:P,getHighEntropyValues:async()=>({brands,mobile:M,platform:P,platformVersion:"",architecture:"",bitness:"",model:"",uaFullVersion:V+".0.0.0"}),toJSON(){return{brands,mobile:M,platform:P}}};Object.defineProperty(Navigator.prototype,"userAgentData",{get:()=>d,configurable:true});})();` : '')
     );

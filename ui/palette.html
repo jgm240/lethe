@@ -1,0 +1,66 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>
+  :root { --bar:#1f2048; --fg:#f4f4f7; --muted:#a4a2bd; --border:#33356a; --hover:rgba(255,255,255,.1); --accent:#e8663d; --field:#0f1030; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; font:14px -apple-system,"Segoe UI",system-ui,sans-serif; user-select:none; background:transparent; }
+  #dim { position:fixed; inset:0; background:rgba(0,0,0,.38); display:flex; justify-content:center; align-items:flex-start; padding-top:11vh; }
+  #panel { width:min(660px,92vw); background:var(--bar); color:var(--fg); border:1px solid var(--border); border-radius:16px; box-shadow:0 24px 70px rgba(0,0,0,.55); overflow:hidden; }
+  #q { width:100%; border:0; outline:0; background:var(--field); color:var(--fg); font:17px inherit; padding:16px 18px; border-bottom:1px solid var(--border); user-select:text; }
+  #list { max-height:52vh; overflow-y:auto; padding:6px; }
+  .row { display:flex; align-items:center; gap:12px; padding:9px 12px; border-radius:10px; cursor:default; }
+  .row.sel { background:var(--accent); color:#fff; }
+  .row:not(.sel):hover { background:var(--hover); }
+  .k { width:20px; text-align:center; opacity:.85; flex:none; }
+  .l { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .s { color:var(--muted); font-size:12px; max-width:42%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:none; }
+  .row.sel .s { color:rgba(255,255,255,.85); }
+  .h { font-size:11px; opacity:.7; border:1px solid currentColor; border-radius:5px; padding:1px 6px; flex:none; }
+  #foot { padding:8px 14px; font-size:12px; color:var(--muted); border-top:1px solid var(--border); display:flex; gap:14px; }
+</style></head>
+<body><div id="dim"><div id="panel"><input id="q" placeholder="Type a command, tab, bookmark or address…" autocomplete="off" spellcheck="false"><div id="list"></div><div id="foot"><span>↑↓ choose</span><span>↵ run</span><span>esc close</span></div></div></div>
+<script>
+const ICON = { action: '⌘', tab: '▭', bookmark: '★', history: '↺', go: '→' };
+let items = [], shown = [], sel = 0;
+const q = document.getElementById('q'), list = document.getElementById('list');
+pal.onTheme(t => { for (const [k, v] of Object.entries(t.vars)) document.documentElement.style.setProperty('--' + k.replace(/[A-Z]/g, m => '-' + m.toLowerCase()), v); });
+pal.onOpen(its => { items = its; q.value = ''; sel = 0; filter(); q.focus(); });
+function score(it, toks) {
+  const hay = (it.label + ' ' + (it.sub || '')).toLowerCase(), lab = it.label.toLowerCase();
+  let s = 0;
+  for (const t of toks) { const i = hay.indexOf(t); if (i < 0) return -1; s += (lab.startsWith(t) ? 30 : lab.includes(t) ? 15 : 4) - Math.min(i, 20) * 0.1; }
+  return s + ({ action: 6, tab: 4, bookmark: 2, history: 0 }[it.kind] || 0);
+}
+function filter() {
+  const toks = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!toks.length) shown = items.filter(i => i.kind === 'action').slice(0, 9).concat(items.filter(i => i.kind === 'tab'));
+  else shown = items.map(i => [score(i, toks), i]).filter(x => x[0] >= 0).sort((a, b) => b[0] - a[0]).slice(0, 40).map(x => x[1]);
+  if (q.value.trim() && !shown.length) shown = [{ id: '__go__', kind: 'go', label: 'Search or go to “' + q.value.trim() + '”', sub: '', hint: '' }];
+  sel = Math.min(sel, Math.max(0, shown.length - 1)); draw();
+}
+function draw() {
+  list.replaceChildren();
+  shown.forEach((it, i) => {
+    const r = document.createElement('div'); r.className = 'row' + (i === sel ? ' sel' : '');
+    const k = Object.assign(document.createElement('span'), { className: 'k', textContent: ICON[it.kind] || '•' });
+    const l = Object.assign(document.createElement('span'), { className: 'l', textContent: it.label });
+    r.append(k, l);
+    if (it.sub) r.append(Object.assign(document.createElement('span'), { className: 's', textContent: it.sub }));
+    if (it.hint) r.append(Object.assign(document.createElement('span'), { className: 'h', textContent: it.hint }));
+    r.onmousemove = () => { if (sel !== i) { sel = i; draw(); } };
+    r.onclick = () => run(it);
+    list.append(r);
+  });
+  const s = list.querySelector('.sel'); if (s) s.scrollIntoView({ block: 'nearest' });
+}
+function run(it) { pal.run(it.id === '__go__' ? { id: '__go__', text: q.value } : { id: it.id }); }
+q.addEventListener('input', () => { sel = 0; filter(); });
+q.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(shown.length - 1, sel + 1); draw(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); draw(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (shown[sel]) run(shown[sel]); }
+  else if (e.key === 'Escape') { e.preventDefault(); pal.close(); }
+});
+document.getElementById('dim').addEventListener('mousedown', e => { if (e.target.id === 'dim') pal.close(); });
+</script></body></html>

@@ -17,6 +17,7 @@
     "leaflet": "^1.9.4"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "tz-lookup": "^6.1.25"
   },
   "homepage": "https://github.com/jgm240/lethe",
@@ -31,7 +32,7 @@
   "build": {
     "appId": "io.github.jgm240.lethe",
     "productName": "Lethe",
-    "copyright": "Copyright \u00a9 2026 Lethe contributors",
+    "copyright": "Copyright © 2026 Lethe contributors",
     "artifactName": "Lethe-${version}-${os}-${arch}.${ext}",
     "directories": {
       "buildResources": "build",

@@ -42,6 +42,13 @@ const DEFAULTS = {
     unprotectedSites: [], fireproofSites: []
   },
   content: { noCss: false, noImages: false, noJs: false },
+  eject: { confirm: true, animation: true },
+  forget: { afterHours: 0, onCloseSites: [] },
+  stats: { enabled: true },
+  filters: { lists: [] },
+  siteRules: {},
+  tabs: { layout: 'horizontal' },
+  reader: { theme: 'papyrus', font: 'serif', size: 20 },
   userAgent: { preset: 'default', custom: '' },
   location: { spoof: false, preset: 'newyork', lat: 40.7128, lon: -74.006, tz: 'America/New_York' },
   player: { mode: 'ask' }
@@ -51,6 +58,7 @@ const bool = v => (typeof v === 'boolean' ? v : undefined);
 const oneOf = list => v => (list.includes(v) ? v : undefined);
 const num = (min, max) => v => (typeof v === 'number' && isFinite(v) && v >= min && v <= max ? v : undefined);
 const tzv = v => { if (typeof v !== 'string' || v.length > 64) return undefined; try { new Intl.DateTimeFormat('en', { timeZone: v }); return v; } catch { return undefined; } };
+const numIn = list => v => (list.includes(v) ? v : undefined);
 const hex = v => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : undefined);
 
 const SCHEMA = {
@@ -72,6 +80,14 @@ const SCHEMA = {
   'privacy.cookiePopups': bool,
   'privacy.saveHistory': bool,
   'privacy.fireOnExit': bool,
+  'eject.confirm': bool,
+  'eject.animation': bool,
+  'forget.afterHours': numIn([0, 1, 6, 24, 168]),
+  'stats.enabled': bool,
+  'tabs.layout': oneOf(['horizontal', 'vertical']),
+  'reader.theme': oneOf(['papyrus', 'light', 'dark']),
+  'reader.font': oneOf(['serif', 'sans']),
+  'reader.size': num(14, 34),
   'content.noCss': bool,
   'content.noImages': bool,
   'content.noJs': bool,
@@ -96,8 +112,27 @@ function merge(base, over) {
   }
   return out;
 }
+const SITE_RE = /^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$/i;
+const UA_IDS = UA_PRESETS.map(p => p.id).filter(id => id !== 'custom');
+// A site rule only ever contains known keys with valid values; anything else is dropped.
+function normalizeRule(r) {
+  const out = {};
+  if (!r || typeof r !== 'object') return out;
+  if (UA_IDS.includes(r.userAgent)) out.userAgent = r.userAgent;
+  if (r.location === 'off' || LOCATIONS.some(l => l.id === r.location)) out.location = r.location;
+  for (const k of ['noJs', 'noCss', 'noImages']) if (typeof r[k] === 'boolean') out[k] = r[k];
+  return out;
+}
 function load(stored) {
   const s = merge(DEFAULTS, stored);
+  s.siteRules = {};
+  if (stored && stored.siteRules && typeof stored.siteRules === 'object' && !Array.isArray(stored.siteRules)) {
+    for (const [site, rule] of Object.entries(stored.siteRules)) {
+      const n = normalizeRule(rule);
+      if (SITE_RE.test(site) && Object.keys(n).length) s.siteRules[site.toLowerCase()] = n;
+    }
+  }
+  s.forget.onCloseSites = (s.forget.onCloseSites || []).filter(x => typeof x === 'string' && SITE_RE.test(x));
   const ok = ['none', 'random', ...BACKGROUNDS.map(b => b.id)];
   if (!ok.includes(s.appearance.newtabBackground)) s.appearance.newtabBackground = 'thrown'; // old artwork ids -> new default
   return s;
@@ -115,4 +150,4 @@ function applySetting(settings, key, value) {
   return true;
 }
 
-module.exports = { ENGINES, BACKGROUNDS, LOCATIONS, UA_PRESETS, DEFAULTS, load, applySetting };
+module.exports = { ENGINES, BACKGROUNDS, LOCATIONS, UA_PRESETS, SITE_RE, normalizeRule, DEFAULTS, load, applySetting };

@@ -2,7 +2,7 @@ const { app, BrowserWindow, WebContentsView, ipcMain, session, Menu, dialog, cli
 const path = require('path');
 const fs = require('fs');
 const { isTracker, siteOf } = require('./trackers');
-const { ENGINES, BACKGROUNDS, LOCATIONS, UA_PRESETS, load: loadSettings, applySetting } = require('./src/settings');
+const { ENGINES, BACKGROUNDS, LOCATIONS, UA_PRESETS, SITE_RE, normalizeRule, load: loadSettings, applySetting } = require('./src/settings');
 const { resolveUA } = require('./src/useragents');
 const tzlookup = require('tz-lookup');
 const { resolveTheme, presetList } = require('./src/themes');
@@ -10,6 +10,9 @@ const { loadJSON, saveJSON, saveJSONNow } = require('./src/store');
 const { startServer } = require('./src/server');
 const COOKIE_SCRIPT = require('./src/cookiepopups');
 const PROMO = require('./src/promo');
+const ZAP_SCRIPT = require('./src/zapper');
+const { createEngine } = require('./src/filters');
+const stats = require('./src/stats');
 
 app.setName('Lethe');
 
@@ -28,13 +31,24 @@ let win = null, ses = null, tabs = [], activeId = null, nextId = 1, findOpen = f
 let theme = null;
 let BASE_UA = '';
 let curUA = { ua: '', spoofed: false, hideCH: false };
-let suggestView = null;
+let suggestView = null, ejectView = null, paletteView = null;
+const palette = { shown: false, items: [] };
+let ejectShown = false;
+let filterEngine = createEngine();
+let visits = {};          // site -> { t, hosts[] }   (site names only, never page URLs)
+let zapped = {};          // host -> [css selectors]
+let groups = [], nextGroupId = 1;
+const readerDocs = new Map();
+let nextReader = 1;
+const GROUP_COLORS = ['#e8663d', '#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#ec4899'];
+const SIDEBAR_W = 232;
+const VBAR = 44;          // toolbar height when tabs are vertical
 const suggest = { items: [], sel: -1, shown: false, seq: 0, text: '' };
 const httpAllow = new Set();
 const pendingUpgrade = new Map();
 
 // ---------- URLs ----------
-const INTERNAL = { newtab: 'newtab.html', settings: 'settings.html', bookmarks: 'bookmarks.html', history: 'history.html', downloads: 'downloads.html' };
+const INTERNAL = { newtab: 'newtab.html', settings: 'settings.html', bookmarks: 'bookmarks.html', history: 'history.html', downloads: 'downloads.html', report: 'report.html', reader: 'reader.html' };
 const isInternal = url => !!ORIGIN && url.startsWith(ORIGIN + '/');
 
 function toReal(url) {
@@ -98,19 +112,49 @@ const isProtected = host => !settings.privacy.unprotectedSites.includes(siteOf(h
 
 // ---------- content blocking + location spoofing ----------
 const getSetting = key => key.split('.').reduce((a, k) => a[k], settings);
-function contentPolicy() {
-  const c = settings.content, parts = [];
-  if (c.noJs) parts.push("script-src 'none'");
-  if (c.noCss) parts.push("style-src 'none'");
-  if (c.noImages) parts.push("img-src 'none'");
+function contentPolicy(site) {
+  const c = settings.content, r = (site && settings.siteRules[site]) || {}, parts = [];
+  const pick = k => (typeof r[k] === 'boolean' ? r[k] : c[k]);
+  if (pick('noJs')) parts.push("script-src 'none'");
+  if (pick('noCss')) parts.push("style-src 'none'");
+  if (pick('noImages')) parts.push("img-src 'none'");
   return parts.join('; ');
 }
-async function applyLocation(tab) {
-  const wc = tab.view.webContents, loc = settings.location;
+// The place to fake for a given host (per-site rule first, then the global setting), or null for "real location".
+function locationFor(host) {
+  const r = settings.siteRules[siteOf(host || '')];
+  if (r && r.location) {
+    if (r.location === 'off') return null;
+    const l = LOCATIONS.find(x => x.id === r.location);
+    return l ? { lat: l.lat, lon: l.lon, tz: l.tz } : null;
+  }
+  return settings.location.spoof ? { lat: settings.location.lat, lon: settings.location.lon, tz: settings.location.tz } : null;
+}
+const infoOf = c => ({ ua: c.ua, platform: c.platform || '', vendor: c.vendor || '', hideCH: !!c.hideCH, chromeMajor: c.chromeMajor || 0, chPlatform: c.chPlatform || '', mobile: !!c.mobile });
+function defaultIdentity() {
+  return {
+    ua: BASE_UA, platform: process.platform === 'darwin' ? 'MacIntel' : process.platform === 'win32' ? 'Win32' : 'Linux x86_64', vendor: 'Google Inc.', hideCH: false,
+    chromeMajor: +String(process.versions.chrome).split('.')[0], chPlatform: process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux', mobile: false
+  };
+}
+// Identity for a host: a per-site rule wins over the global user-agent setting.
+function effectiveUA(host) {
+  const r = settings.siteRules[siteOf(host || '')];
+  if (r && r.userAgent) return Object.assign(resolveUA({ userAgent: { preset: r.userAgent, custom: '' } }, BASE_UA), { site: true });
+  return curUA;
+}
+function uaInfoFor(host) {
+  const eff = effectiveUA(host);
+  if (!eff.site) return curUA.spoofed ? infoOf(curUA) : null;
+  return infoOf(eff.spoofed ? eff : defaultIdentity());
+}
+async function applyLocation(tab, host) {
+  const wc = tab.view.webContents, loc = locationFor(host !== undefined ? host : hostOf(tab.url));
+  tab.locKey = loc ? `${loc.lat},${loc.lon},${loc.tz}` : '';
   try {
-    if (!loc.spoof && !wc.debugger.isAttached()) return;
+    if (!loc && !wc.debugger.isAttached()) return;
     if (!wc.debugger.isAttached()) wc.debugger.attach('1.3');
-    if (loc.spoof) {
+    if (loc) {
       await wc.debugger.sendCommand('Emulation.setGeolocationOverride', { latitude: loc.lat, longitude: loc.lon, accuracy: 25 });
       await wc.debugger.sendCommand('Emulation.setTimezoneOverride', { timezoneId: loc.tz });
     } else {
@@ -119,7 +163,7 @@ async function applyLocation(tab) {
     }
   } catch { /* tab may be closing */ }
 }
-const applyLocationAll = () => tabs.forEach(applyLocation);
+const applyLocationAll = () => tabs.forEach(t => applyLocation(t));
 // Chromium's own UA emulation: keeps the User-Agent header, navigator.userAgent/platform, navigator.userAgentData
 // and the sec-ch-ua-* request headers consistent with the chosen identity.
 async function applyUAEmulation(tab) {
@@ -162,17 +206,21 @@ function applyTheme() {
     win.setBackgroundColor(theme.vars.bg);
     win.webContents.send('theme', theme);
     if (suggestView) suggestView.webContents.send('theme', theme);
+    if (paletteView) paletteView.webContents.send('theme', theme);
     for (const t of tabs) if (isInternal(t.url)) t.view.webContents.send('lethe:theme', theme);
   }
 }
 
 // ---------- layout / state ----------
+const isVertical = () => settings.tabs.layout === 'vertical';
+const chromeTop = () => (isVertical() ? VBAR : TOPBAR) + (findOpen ? FINDBAR : 0);
 function layout() {
   if (!win) return;
   const [w, h] = win.getContentSize();
-  const top = TOPBAR + (findOpen ? FINDBAR : 0);
+  const top = chromeTop(), left = isVertical() ? SIDEBAR_W : 0;
   const t = activeTab();
-  if (t) t.view.setBounds({ x: 0, y: top, width: w, height: Math.max(0, h - top) });
+  if (t) t.view.setBounds({ x: left, y: top, width: Math.max(0, w - left), height: Math.max(0, h - top) });
+  for (const v of [ejectView, paletteView]) if (v) v.setBounds({ x: 0, y: 0, width: w, height: h });
 }
 
 function pushState() {
@@ -182,7 +230,9 @@ function pushState() {
   const url = t ? displayUrl(t) : '';
   const real = t ? t.url : '';
   win.webContents.send('state', {
-    tabs: tabs.map(x => ({ id: x.id, title: x.title, favicon: x.favicon, loading: x.loading })),
+    tabs: tabs.map(x => ({ id: x.id, title: x.title, favicon: x.favicon, loading: x.loading, pinned: !!x.pinned, group: x.group })),
+    groups: groups.map(g => ({ id: g.id, name: g.name, color: g.color, collapsed: !!g.collapsed })),
+    layout: settings.tabs.layout,
     activeId,
     url,
     secure: !!t && (real.startsWith('https:') || isInternal(real)),
@@ -205,7 +255,7 @@ function hideSuggest() {
 function showSuggest(rect) {
   if (!suggest.items.length) return hideSuggest();
   const h = Math.min(suggest.items.length, 8) * 34 + 10;
-  suggestView.setBounds({ x: Math.round(rect.x), y: 78, width: Math.round(rect.w), height: h });
+  suggestView.setBounds({ x: Math.round(rect.x), y: isVertical() ? 40 : 78, width: Math.round(rect.w), height: h });
   win.contentView.addChildView(suggestView);
   suggest.shown = true;
   suggestView.webContents.send('suggest-items', { items: suggest.items, sel: suggest.sel });
@@ -277,7 +327,7 @@ function createTab(input, activate = true) {
       preload: path.join(__dirname, 'pagePreload.js'), autoplayPolicy: 'no-user-gesture-required'
     }
   });
-  const tab = { id: nextId++, view, title: 'New Tab', url, favicon: null, loading: false, blocked: 0, blockedHosts: {}, stripped: 0, popups: 0 };
+  const tab = { id: nextId++, view, title: 'New Tab', url, favicon: null, loading: false, blocked: 0, blockedHosts: {}, stripped: 0, popups: 0, pinned: false, group: null, sites: new Set(), curSite: '', locKey: '' };
   tabs.push(tab);
   const wc = view.webContents;
   applyLocation(tab);
@@ -293,20 +343,25 @@ function createTab(input, activate = true) {
   });
   wc.on('did-navigate', (_e, u) => {
     tab.url = u;
-    if (isInternal(u)) { tab.title = tab.title === 'New Tab' || !tab.title ? ({ newtab: 'New Tab', settings: 'Settings', bookmarks: 'Bookmarks', history: 'History', downloads: 'Downloads', player: 'Lethe Player' }[toDisplay(u).replace('lethe://', '').split(/[/?]/)[0]] || 'Lethe') : tab.title; wc.send('lethe:theme', theme); }
+    const prevSite = tab.curSite, nowSite = /^https?:/.test(u) && !isInternal(u) ? siteOf(hostOf(u)) : '';
+    tab.curSite = nowSite;
+    if (nowSite) noteVisit(tab, u);
+    if (prevSite && prevSite !== nowSite) maybeForgetClosedSites([prevSite]);
+    if (isInternal(u)) { tab.title = tab.title === 'New Tab' || !tab.title ? ({ newtab: 'New Tab', settings: 'Settings', bookmarks: 'Bookmarks', history: 'History', downloads: 'Downloads', player: 'Lethe Player', report: 'Privacy Report', reader: 'Reader' }[toDisplay(u).replace('lethe://', '').split(/[/?]/)[0]] || 'Lethe') : tab.title; wc.send('lethe:theme', theme); }
     pushState();
   });
   wc.on('did-navigate-in-page', (_e, u, isMain) => { if (isMain) { tab.url = u; pushState(); maybeBanner(wc, u); } });
   wc.on('dom-ready', () => {
     const u = wc.getURL();
     if (isInternal(u)) { wc.send('lethe:theme', theme); return; }
+    applyCosmetics(wc, u);
     if (settings.content.noJs) return;
     if (settings.general.hideSearchPromos && !(DEV && process.env.LETHE_NO_HIDE) && /^https:\/\/([\w-]+\.)?duckduckgo\.com\//.test(u)) {
       wc.insertCSS(PROMO.CSS).catch(() => {});
       wc.executeJavaScript(PROMO.JS).catch(() => {});
     }
     if (settings.privacy.cookiePopups && /^https?:/.test(u) && isProtected(hostOf(u))) {
-      wc.executeJavaScript(COOKIE_SCRIPT).then(n => { if (n > 0 && tabs.includes(tab)) { tab.popups += n; pushState(); } }).catch(() => {});
+      wc.executeJavaScript(COOKIE_SCRIPT).then(n => { if (n > 0 && tabs.includes(tab)) { tab.popups += n; stats.add('popups', n); pushState(); } }).catch(() => {});
     }
   });
   wc.on('did-finish-load', () => maybeBanner(wc, wc.getURL()));
@@ -364,7 +419,10 @@ function activateTab(id) {
     win.contentView.removeChildView(cur.view);
   }
   activeId = id;
+  const g = next.group != null && groups.find(x => x.id === next.group);
+  if (g && g.collapsed) g.collapsed = false;
   win.contentView.addChildView(next.view);
+  raiseOverlays();
   layout();
   pushState();
   if (next.url === NEWTAB) win.webContents.send('focus-address'); else next.view.webContents.focus();
@@ -377,9 +435,61 @@ function closeTab(id) {
   if (/^https?:/.test(tab.url) || (isInternal(tab.url) && tab.url !== NEWTAB)) { closedTabs.push({ url: tab.url, title: tab.title }); if (closedTabs.length > 20) closedTabs.shift(); }
   try { win.contentView.removeChildView(tab.view); } catch { /* ignore */ }
   tab.view.webContents.close();
+  groups = groups.filter(g => tabs.some(t => t.group === g.id));
+  maybeForgetClosedSites([...tab.sites]);
   if (!tabs.length) { createTab(); return; }
   if (id === activeId) activateTab(tabs[Math.min(i, tabs.length - 1)].id); else pushState();
 }
+// ---- pinned tabs, groups, ordering ----
+function orderTabs() {
+  const pinned = tabs.filter(t => t.pinned), rest = tabs.filter(t => !t.pinned), out = [], seen = new Set();
+  for (const t of rest) {
+    if (t.group == null) out.push(t);
+    else if (!seen.has(t.group)) { seen.add(t.group); out.push(...rest.filter(x => x.group === t.group)); }
+  }
+  tabs = [...pinned, ...out];
+}
+function tidyGroups() { groups = groups.filter(g => tabs.some(t => t.group === g.id)); }
+function pinTab(id, v) { const t = tabs.find(x => x.id === id); if (!t) return; t.pinned = v; if (v) t.group = null; orderTabs(); tidyGroups(); pushState(); }
+function newGroupWith(id) {
+  const t = tabs.find(x => x.id === id); if (!t) return;
+  const g = { id: nextGroupId++, name: 'Group ' + (nextGroupId - 1), color: GROUP_COLORS[groups.length % GROUP_COLORS.length], collapsed: false };
+  groups.push(g); t.group = g.id; t.pinned = false; orderTabs(); pushState();
+}
+function setGroup(id, gid) { const t = tabs.find(x => x.id === id); if (!t) return; t.group = gid; if (gid != null) t.pinned = false; orderTabs(); tidyGroups(); pushState(); }
+function moveTab(id, beforeId) {
+  const t = tabs.find(x => x.id === id); if (!t || id === beforeId) return;
+  const b = tabs.find(x => x.id === beforeId);
+  if (b && b.pinned !== t.pinned) return;
+  tabs = tabs.filter(x => x !== t);
+  if (b) { t.group = b.group; tabs.splice(tabs.indexOf(b), 0, t); } else { t.group = null; tabs.push(t); }
+  orderTabs(); tidyGroups(); pushState();
+}
+function tabMenu(id) {
+  const t = tabs.find(x => x.id === id); if (!t) return;
+  const items = [
+    { label: t.pinned ? 'Unpin Tab' : 'Pin Tab', click: () => pinTab(id, !t.pinned) },
+    { label: 'Add to New Group', click: () => newGroupWith(id) },
+    ...(groups.length ? [{ label: 'Add to Group', submenu: groups.map(g => ({ label: g.name, type: 'checkbox', checked: t.group === g.id, click: () => setGroup(id, g.id) })) }] : []),
+    ...(t.group != null ? [{ label: 'Remove from Group', click: () => setGroup(id, null) }] : []),
+    { type: 'separator' },
+    { label: 'Duplicate Tab', click: () => createTab(t.url, true) },
+    { label: 'Close Tab', click: () => closeTab(id) },
+    { label: 'Close Other Tabs', enabled: tabs.length > 1, click: () => tabs.filter(x => x.id !== id && !x.pinned).forEach(x => closeTab(x.id)) }
+  ];
+  Menu.buildFromTemplate(items).popup({ window: win });
+}
+function groupMenu(gid) {
+  const g = groups.find(x => x.id === gid); if (!g) return;
+  Menu.buildFromTemplate([
+    { label: g.collapsed ? 'Expand Group' : 'Collapse Group', click: () => { g.collapsed = !g.collapsed; pushState(); } },
+    { label: 'Color', submenu: GROUP_COLORS.map((c, i) => ({ label: ['Orange', 'Blue', 'Green', 'Purple', 'Yellow', 'Pink'][i], type: 'radio', checked: g.color === c, click: () => { g.color = c; pushState(); } })) },
+    { label: 'Ungroup', click: () => { tabs.forEach(t => { if (t.group === gid) t.group = null; }); tidyGroups(); pushState(); } },
+    { label: 'Close Group', click: () => tabs.filter(t => t.group === gid).forEach(t => closeTab(t.id)) }
+  ]).popup({ window: win });
+}
+function setLayout(v) { applySetting(settings, 'tabs.layout', v); saveJSON('settings', settings); layout(); pushState(); }
+
 function reopenTab() { const c = closedTabs.pop(); if (c) createTab(c.url, true); }
 function cycleTab(dir) { const i = tabs.findIndex(t => t.id === activeId); activateTab(tabs[(i + dir + tabs.length) % tabs.length].id); }
 function openInternal(name) {
@@ -388,7 +498,24 @@ function openInternal(name) {
   if (existing) activateTab(existing.id); else createTab(url, true);
 }
 
-// ---------- Fire Button ----------
+// ---------- forgetting: Eject to Lethe, forget ranges, per-site and timed forgetting ----------
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fireproof = site => settings.privacy.fireproofSites.includes(site);
+const currentSite = () => { const t = activeTab(); return t && /^https?:/.test(t.url) && !isInternal(t.url) ? siteOf(hostOf(t.url)) : ''; };
+function toast(text) { if (win && !win.isDestroyed()) win.webContents.send('toast', text); }
+
+// Remember *which sites* were visited (never URLs or titles) so they can be forgotten later by range, timer or rule.
+function noteVisit(tab, url) {
+  if (!/^https?:/.test(url) || isInternal(url)) return;
+  const host = hostOf(url), site = siteOf(host);
+  const v = visits[site] || (visits[site] = { t: 0, hosts: [] });
+  v.t = Date.now();
+  if (!v.hosts.includes(host)) { v.hosts.push(host); if (v.hosts.length > 20) v.hosts.shift(); }
+  tab.sites.add(site);
+  persistVisits();
+}
+function persistVisits() { if (settings.privacy.saveHistory || settings.forget.afterHours > 0) saveJSON('visits', visits); }
+
 async function clearAllData() {
   const keep = new Set(settings.privacy.fireproofSites);
   let saved = [];
@@ -406,24 +533,195 @@ async function clearAllData() {
       await ses.cookies.set({ url: (c.secure ? 'https://' : 'http://') + dom + (c.path || '/'), name: c.name, value: c.value, domain: c.domain, path: c.path, secure: c.secure, httpOnly: c.httpOnly, expirationDate: c.expirationDate, sameSite: c.sameSite });
     } catch { /* ignore */ }
   }
-  history = []; downloads = []; closedTabs = []; httpAllow.clear();
-  saveJSONNow('history', history);
+  history = []; downloads = []; closedTabs = []; visits = {}; httpAllow.clear();
+  saveJSONNow('history', history); saveJSONNow('visits', visits);
 }
 
-async function fire() {
+// Erase everything a site stored (cookies, local storage, caches) plus its history entries.
+async function forgetSite(site, { respectFireproof = false } = {}) {
+  if (!site || (respectFireproof && fireproof(site))) return false;
+  const hosts = new Set([site, 'www.' + site, ...((visits[site] || {}).hosts || [])]);
+  const cookies = await ses.cookies.get({});
+  for (const c of cookies) {
+    const dom = (c.domain || '').replace(/^\./, '');
+    if (siteOf(dom) === site) {
+      hosts.add(dom);
+      try { await ses.cookies.remove((c.secure ? 'https://' : 'http://') + dom + (c.path || '/'), c.name); } catch { /* ignore */ }
+    }
+  }
+  for (const h of hosts) for (const proto of ['https://', 'http://']) { try { await ses.clearStorageData({ origin: proto + h }); } catch { /* ignore */ } }
+  history = history.filter(x => siteOf(hostOf(x.url)) !== site);
+  delete visits[site];
+  saveJSON('history', history); persistVisits();
+  return true;
+}
+
+// Forget every site visited in the last `ms` milliseconds (and the history / downloads from that window).
+async function forgetSince(ms) {
+  const cutoff = Date.now() - ms;
+  const sites = Object.entries(visits).filter(([, v]) => v.t >= cutoff).map(([k]) => k);
+  let n = 0;
+  for (const site of sites) if (await forgetSite(site, { respectFireproof: true })) n++;
+  history = history.filter(h => h.time < cutoff); downloads = downloads.filter(d => d.time < cutoff);
+  saveJSON('history', history);
+  for (const t of tabs) {
+    if (sites.includes(siteOf(hostOf(t.url))) && !fireproof(siteOf(hostOf(t.url))) && !isInternal(t.url)) t.view.webContents.loadURL(NEWTAB).catch(() => {});
+  }
+  return n;
+}
+
+// Timed forgetting: sites untouched for N hours are forgotten (never ones that are open, or fireproof).
+async function forgetStale() {
+  const hrs = settings.forget.afterHours;
+  if (!hrs) return 0;
+  const cutoff = Date.now() - hrs * 3600e3, open = new Set(tabs.map(t => siteOf(hostOf(t.url)))); let n = 0;
+  for (const [site, v] of Object.entries(visits)) if (v.t < cutoff && !open.has(site) && !fireproof(site) && await forgetSite(site)) n++;
+  return n;
+}
+// "Forget when the tab closes" rule.
+function maybeForgetClosedSites(sites) {
+  for (const site of sites) {
+    if (settings.forget.onCloseSites.includes(site) && !tabs.some(t => siteOf(hostOf(t.url)) === site)) forgetSite(site).catch(() => {});
+  }
+}
+
+async function eject(scope = 'all') {
+  const site = currentSite();
+  if (scope === 'site' && !site) return toast('Open a website first');
   const fp = settings.privacy.fireproofSites.length;
-  const { response } = await dialog.showMessageBox(win, {
-    type: 'warning', buttons: ['Burn All Tabs and Data', 'Cancel'], defaultId: 0, cancelId: 1,
-    message: 'Burn all tabs and data?',
-    detail: 'Closes every tab and erases history, cookies, site data, cache and downloads list. Bookmarks and settings are kept.' + (fp ? `\n${fp} fireproof site${fp === 1 ? '' : 's'} will stay signed in.` : '')
-  });
-  if (response !== 0) return;
-  hideSuggest();
-  const old = tabs.slice();
-  tabs = []; activeId = null;
-  for (const t of old) { try { win.contentView.removeChildView(t.view); } catch { /* ignore */ } t.view.webContents.close(); }
-  await clearAllData();
-  createTab();
+  const copy = {
+    all: ['Eject to Lethe?', 'Throws every tab, your history, cookies, site data, cache and downloads list into the river. Bookmarks and settings are kept.' + (fp ? `\n${fp} fireproof site${fp === 1 ? '' : 's'} will stay signed in.` : '')],
+    hour: ['Forget the last hour?', 'Erases cookies, site data and history for every site you visited in the last hour (fireproof sites keep their sign-ins). Sites you also visited earlier are forgotten completely.'],
+    day: ['Forget the last day?', 'Erases cookies, site data and history for every site you visited in the last 24 hours (fireproof sites keep their sign-ins). Sites you also visited earlier are forgotten completely.'],
+    site: [`Forget ${site}?`, `Erases ${site}'s cookies, site data and history entries. You'll be signed out of it.`]
+  }[scope];
+  if (settings.eject.confirm && !(DEV && process.env.LETHE_AUTOCONFIRM)) {
+    const { response } = await dialog.showMessageBox(win, { type: 'warning', buttons: [scope === 'all' ? 'Eject to Lethe' : 'Forget', 'Cancel'], defaultId: 0, cancelId: 1, message: copy[0], detail: copy[1] });
+    if (response !== 0) return;
+  }
+  hideSuggest(); closePalette();
+  if (scope === 'all') {
+    const started = Date.now(), animate = settings.eject.animation;
+    if (animate) showEject();
+    const old = tabs.slice();
+    tabs = []; groups = []; activeId = null;
+    for (const t of old) { try { win.contentView.removeChildView(t.view); } catch { /* ignore */ } t.view.webContents.close(); }
+    await clearAllData();
+    stats.add('ejects');
+    createTab();
+    if (animate) { const left = 2400 - (Date.now() - started); if (left > 0) await sleep(left); hideEject(); }
+    return;
+  }
+  let msg;
+  if (scope === 'site') {
+    await forgetSite(site);
+    const t = activeTab(); if (t) t.view.webContents.loadURL(NEWTAB).catch(() => {});
+    msg = `Forgot ${site}`;
+  } else {
+    const n = await forgetSince(scope === 'hour' ? 3600e3 : 86400e3);
+    msg = `Forgot ${n} site${n === 1 ? '' : 's'} from the last ${scope}`;
+  }
+  pushState(); toast(msg);
+}
+const fire = () => eject('all');
+
+function showEject() {
+  if (!ejectView) return;
+  const [w, h] = win.getContentSize();
+  ejectView.setBounds({ x: 0, y: 0, width: w, height: h });
+  win.contentView.addChildView(ejectView);
+  ejectShown = true;
+  ejectView.webContents.executeJavaScript('window.__start && window.__start()').catch(() => {});
+}
+function hideEject() { ejectShown = false; if (ejectView && win && !win.isDestroyed()) { try { win.contentView.removeChildView(ejectView); } catch { /* ignore */ } } }
+// A view added later sits on top, so re-raise any open overlay after a tab is added (the Eject animation stays above new tabs).
+function raiseOverlays() {
+  if (!win || win.isDestroyed()) return;
+  if (suggest.shown && suggestView) win.contentView.addChildView(suggestView);
+  if (palette.shown && paletteView) win.contentView.addChildView(paletteView);
+  if (ejectShown && ejectView) win.contentView.addChildView(ejectView);
+}
+function closePalette() { if (palette.shown && paletteView && win && !win.isDestroyed()) { try { win.contentView.removeChildView(paletteView); } catch { /* ignore */ } } palette.shown = false; }
+
+// ---------- filter lists + element zapper ----------
+const filtersDir = () => path.join(app.getPath('userData'), 'filters');
+function loadFilterLists() {
+  const e = createEngine();
+  for (const l of settings.filters.lists) if (l.enabled) { try { e.addText(fs.readFileSync(path.join(filtersDir(), l.id + '.txt'), 'utf8')); } catch { /* list file missing */ } }
+  filterEngine = e;
+}
+async function fetchFilterList(url) {
+  const u = new URL(url);
+  if (u.protocol !== 'https:') throw new Error('Only https:// lists are allowed');
+  const r = await net.fetch(url);
+  if (!r.ok) throw new Error('Download failed (HTTP ' + r.status + ')');
+  const text = await r.text();
+  if (text.length > 30 * 1048576) throw new Error('That list is too large');
+  return text;
+}
+async function addFilterList(url, name) {
+  const text = await fetchFilterList(url), u = new URL(url), id = 'l' + Date.now().toString(36);
+  fs.mkdirSync(filtersDir(), { recursive: true });
+  fs.writeFileSync(path.join(filtersDir(), id + '.txt'), text);
+  const probe = createEngine(); probe.addText(text);
+  settings.filters.lists.push({ id, name: String(name || u.hostname + u.pathname).slice(0, 60), url, enabled: true, updated: Date.now(), count: probe.size });
+  saveJSON('settings', settings); loadFilterLists();
+}
+async function updateFilterLists(onlyStale = false) {
+  let n = 0;
+  for (const l of settings.filters.lists) {
+    if (!l.enabled || (onlyStale && Date.now() - l.updated < 7 * 86400e3)) continue;
+    try {
+      const text = await fetchFilterList(l.url); fs.writeFileSync(path.join(filtersDir(), l.id + '.txt'), text);
+      const probe = createEngine(); probe.addText(text); l.count = probe.size; l.updated = Date.now(); n++;
+    } catch { /* keep the old copy */ }
+  }
+  if (n) { saveJSON('settings', settings); loadFilterLists(); }
+  return n;
+}
+const zapCss = host => {
+  const sels = [];
+  for (const [k, v] of Object.entries(zapped)) if (host === k || host.endsWith('.' + k)) sels.push(...v);
+  return sels.length ? sels.join(',\n') + ' { display: none !important; }' : '';
+};
+function applyCosmetics(wc, url) {
+  const host = hostOf(url); let css = '';
+  if (settings.privacy.trackerBlocking && filterEngine.size && isProtected(host)) css += filterEngine.cosmeticCss(host);
+  css += zapCss(host);
+  if (css) wc.insertCSS(css).catch(() => {});
+}
+async function zapElement() {
+  const t = activeTab();
+  if (!t || isInternal(t.url) || !/^https?:/.test(t.url)) return toast('Open a website to zap an element');
+  t.view.webContents.focus();
+  try {
+    const sel = await t.view.webContents.executeJavaScript(ZAP_SCRIPT);
+    if (!sel) return;
+    const host = hostOf(t.url), list = zapped[host] || (zapped[host] = []);
+    if (!list.includes(sel)) list.push(sel);
+    if (list.length > 50) list.shift();
+    saveJSON('zapped', zapped);
+    t.view.webContents.insertCSS(`${sel} { display: none !important; }`).catch(() => {});
+    toast('Element hidden. You can undo it in Settings → Filters.');
+  } catch { toast('Couldn’t zap an element on this page'); }
+}
+
+// ---------- reader mode ----------
+let READER_SRC = '';
+async function openReader() {
+  const t = activeTab();
+  if (!t || isInternal(t.url) || !/^https?:/.test(t.url)) return toast('Reader mode works on regular web pages');
+  try {
+    if (!READER_SRC) READER_SRC = fs.readFileSync(require.resolve('@mozilla/readability/Readability.js'), 'utf8');
+    const art = await t.view.webContents.executeJavaScript(`(() => { var module = { exports: {} }; ${READER_SRC}
+      var R = module.exports; var a = new R(document.cloneNode(true)).parse();
+      return a ? { title: a.title, byline: a.byline, siteName: a.siteName, content: a.content, excerpt: a.excerpt, lang: a.lang } : null; })()`);
+    if (!art || !art.content) return toast('Couldn’t find an article on this page');
+    const id = nextReader++;
+    readerDocs.set(id, { ...art, url: t.url, host: hostOf(t.url) });
+    if (readerDocs.size > 20) readerDocs.delete(readerDocs.keys().next().value);
+    t.view.webContents.loadURL(toReal(`lethe://reader?id=${id}`)).catch(() => {});
+  } catch { toast('Couldn’t open reader mode on this page'); }
 }
 
 // ---------- privacy engine ----------
@@ -432,7 +730,7 @@ function setupPrivacy() {
   BASE_UA = ses.getUserAgent().replace(/\s(Electron|lethe|Lethe[^/]*)\/\S+/gi, '');
   applyUserAgent();
 
-  ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (d, cb) => {
+  const handleBefore = (d, cb) => {
     let u;
     try { u = new URL(d.url); } catch { return cb({}); }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return cb({});
@@ -449,31 +747,51 @@ function setupPrivacy() {
       if (settings.privacy.stripTrackingParams && prot) {
         let changed = false;
         for (const k of [...u.searchParams.keys()]) if (TRACK_PARAM.test(k)) { u.searchParams.delete(k); changed = true; }
-        if (changed) { if (tab) tab.stripped++; return cb({ redirectURL: u.toString() }); }
+        if (changed) { if (tab) tab.stripped++; stats.add('params'); return cb({ redirectURL: u.toString() }); }
       }
     }
     // Smarter encryption
     if (settings.privacy.httpsUpgrade && prot && u.protocol === 'http:' && !isLocal(u.hostname) && !httpAllow.has(u.hostname)) {
       if (main) pendingUpgrade.set(u.hostname, d.url);
+      stats.add('upgrades');
       return cb({ redirectURL: d.url.replace(/^http:/, 'https:') });
     }
-    // Tracker blocking (third-party only)
-    if (settings.privacy.trackerBlocking && tab && !main && prot && isTracker(u.hostname) && siteOf(u.hostname) !== siteOf(pageHost)) {
-      tab.blocked++;
-      tab.blockedHosts[siteOf(u.hostname)] = (tab.blockedHosts[siteOf(u.hostname)] || 0) + 1;
-      if (tab.id === activeId) pushState();
-      return cb({ cancel: true });
+    // Tracker blocking: built-in list + any filter lists the user added
+    if (settings.privacy.trackerBlocking && tab && !main && prot) {
+      const third = siteOf(u.hostname) !== siteOf(pageHost);
+      if ((third && isTracker(u.hostname)) || (filterEngine.size && filterEngine.match(d.url, pageHost, d.resourceType))) {
+        const th = siteOf(u.hostname);
+        tab.blocked++; tab.blockedHosts[th] = (tab.blockedHosts[th] || 0) + 1; stats.add('blocked', 1, th);
+        if (tab.id === activeId) pushState();
+        return cb({ cancel: true });
+      }
     }
     cb({});
+  };
+  ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (d, cb) => {
+    // A per-site location rule must be in place *before* the page loads (geolocation + time zone).
+    if (d.resourceType === 'mainFrame' && !d.url.startsWith(ORIGIN)) {
+      const tab = tabByWcId(d.webContentsId), h = hostOf(d.url);
+      if (tab && h) {
+        const loc = locationFor(h), key = loc ? `${loc.lat},${loc.lon},${loc.tz}` : '';
+        if ((tab.locKey || '') !== key) { applyLocation(tab, h).finally(() => handleBefore(d, cb)); return; }
+      }
+    }
+    handleBefore(d, cb);
   });
 
   ses.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (d, cb) => {
-    const h = d.requestHeaders;
-    if (curUA.hideCH) for (const k of Object.keys(h)) if (k.toLowerCase().startsWith('sec-ch-ua')) delete h[k]; // Firefox/Safari don't send Chromium client hints
-    else if (curUA.spoofed && curUA.chPlatform) for (const k of Object.keys(h)) { // keep Chromium client hints consistent with the chosen UA
-      const l = k.toLowerCase();
-      if (l === 'sec-ch-ua-platform') h[k] = `"${curUA.chPlatform}"`;
-      else if (l === 'sec-ch-ua-mobile') h[k] = curUA.mobile ? '?1' : '?0';
+    const h = d.requestHeaders, tabR = tabByWcId(d.webContentsId);
+    const uaHost = d.resourceType === 'mainFrame' || !tabR ? hostOf(d.url) : hostOf(tabR.url);
+    const eff = effectiveUA(uaHost), stripCH = () => { for (const k of Object.keys(h)) if (k.toLowerCase().startsWith('sec-ch-ua')) delete h[k]; };
+    if (eff.site) { h['User-Agent'] = eff.ua; stripCH(); }                  // per-site identity
+    else if (curUA.hideCH) stripCH();                                        // Firefox/Safari don't send Chromium client hints
+    else if (curUA.spoofed && curUA.chPlatform) {
+      for (const k of Object.keys(h)) {                                      // keep Chromium client hints consistent with the chosen UA
+        const l = k.toLowerCase();
+        if (l === 'sec-ch-ua-platform') h[k] = `"${curUA.chPlatform}"`;
+        else if (l === 'sec-ch-ua-mobile') h[k] = curUA.mobile ? '?1' : '?0';
+      }
     }
     if (d.url.startsWith('https://tile.openstreetmap.org/')) h['User-Agent'] = `Lethe/${app.getVersion()}` + (REPO_URL ? ` (+${REPO_URL})` : ''); // OSM tile policy: identify the app
     if (settings.privacy.gpc && !d.url.startsWith(ORIGIN)) { h['Sec-GPC'] = '1'; h['DNT'] = '1'; }
@@ -490,7 +808,7 @@ function setupPrivacy() {
 
   ses.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (d, cb) => {
     const tab = tabByWcId(d.webContentsId);
-    const policy = contentPolicy();
+    const policy = contentPolicy(siteOf(d.resourceType === 'mainFrame' || !tab ? hostOf(d.url) : hostOf(tab.url)));
     if (policy && d.responseHeaders && d.url.startsWith('http') && !d.url.startsWith(ORIGIN + '/')
         && (d.resourceType === 'mainFrame' || (d.resourceType === 'subFrame' && tab && !isInternal(tab.url)))) {
       const key = Object.keys(d.responseHeaders).find(k => k.toLowerCase() === 'content-security-policy');
@@ -499,7 +817,7 @@ function setupPrivacy() {
     if (settings.privacy.thirdPartyCookies && tab && d.resourceType !== 'mainFrame' && d.responseHeaders) {
       try {
         if (siteOf(hostOf(tab.url)) !== siteOf(new URL(d.url).hostname)) {
-          for (const k of Object.keys(d.responseHeaders)) if (k.toLowerCase() === 'set-cookie') delete d.responseHeaders[k];
+          for (const k of Object.keys(d.responseHeaders)) if (k.toLowerCase() === 'set-cookie') { delete d.responseHeaders[k]; stats.add('cookies'); }
         }
       } catch { /* ignore */ }
     }
@@ -507,9 +825,8 @@ function setupPrivacy() {
   });
 
   const allowed = ['fullscreen', 'clipboard-sanitized-write'];
-  const ok = perm => allowed.includes(perm) || (perm === 'geolocation' && settings.location.spoof);
-  ses.setPermissionRequestHandler((_wc, perm, cb) => cb(ok(perm)));
-  ses.setPermissionCheckHandler((_wc, perm) => ok(perm));
+  ses.setPermissionRequestHandler((wc, perm, cb, details) => cb(allowed.includes(perm) || (perm === 'geolocation' && !!locationFor(hostOf((details && details.requestingUrl) || wc.getURL())))));
+  ses.setPermissionCheckHandler((_wc, perm, origin) => allowed.includes(perm) || (perm === 'geolocation' && !!locationFor(hostOf(origin || ''))));
 
   let dlId = 1;
   ses.on('will-download', (_e, item) => {
@@ -555,12 +872,16 @@ function popupMenu(kind) {
       ...hosts.map(([h, n]) => ({ label: `    ${h} — ${n}`, enabled: false })),
       ...(t.stripped ? [{ label: `${t.stripped} tracking parameter redirect${t.stripped === 1 ? '' : 's'} cleaned`, enabled: false }] : []),
       ...(t.popups ? [{ label: `${t.popups} cookie pop-up${t.popups === 1 ? '' : 's'} handled`, enabled: false }] : []),
-      ...(contentPolicy() ? [{ label: 'Blocking on this page: ' + [settings.content.noJs && 'JavaScript', settings.content.noCss && 'CSS', settings.content.noImages && 'images'].filter(Boolean).join(', '), enabled: false }] : []),
-      ...(settings.location.spoof ? [{ label: `Location spoofed: ${locationName()}`, enabled: false }] : []),
+      ...(contentPolicy(site) ? [{ label: 'Blocking on this page: ' + contentPolicy(site).split('; ').map(p => ({ 'script-src': 'JavaScript', 'style-src': 'CSS', 'img-src': 'images' }[p.split(' ')[0]])).join(', '), enabled: false }] : []),
+      ...(!internal && locationFor(host) ? [{ label: `Location spoofed: ${(settings.siteRules[site] && settings.siteRules[site].location && settings.siteRules[site].location !== 'off') ? (LOCATIONS.find(l => l.id === settings.siteRules[site].location) || {}).name : locationName()}`, enabled: false }] : []),
+      ...(!internal && settings.siteRules[site] ? [{ label: `This site has custom rules`, enabled: false }] : []),
       { type: 'separator' },
       ...(internal ? [] : [
         { label: `Protections on for ${site}`, type: 'checkbox', checked: isProtected(host), click: () => { toggleList('unprotectedSites', site); t.view.webContents.reload(); } },
         { label: `Fireproof ${site}`, type: 'checkbox', checked: settings.privacy.fireproofSites.includes(site), click: () => toggleList('fireproofSites', site) },
+        { label: `Forget ${site} when its tab closes`, type: 'checkbox', checked: settings.forget.onCloseSites.includes(site), click: () => { const a = settings.forget.onCloseSites, i = a.indexOf(site); if (i >= 0) a.splice(i, 1); else a.push(site); saveJSON('settings', settings); } },
+        { label: `Forget ${site} now`, click: () => eject('site') },
+        { label: `Site rules for ${site}…`, click: () => openInternal('settings?site=' + encodeURIComponent(site)) },
         { type: 'separator' }
       ]),
       { label: 'Privacy Settings…', click: () => openInternal('settings') }
@@ -575,6 +896,12 @@ function popupMenu(kind) {
       { label: 'Bookmarks', submenu: bookmarkMenu() },
       { label: 'History', click: () => openInternal('history') },
       { label: 'Downloads', click: () => openInternal('downloads') },
+      { label: 'Privacy Report', click: () => openInternal('report') },
+      { type: 'separator' },
+      { label: 'Command Palette…', accelerator: 'CmdOrCtrl+K', click: openPalette },
+      { label: 'Reader Mode', accelerator: 'CmdOrCtrl+Shift+R', click: openReader },
+      { label: 'Zap Element…', accelerator: 'CmdOrCtrl+Shift+X', click: zapElement },
+      { label: 'Vertical Tabs', type: 'checkbox', checked: isVertical(), click: () => setLayout(isVertical() ? 'horizontal' : 'vertical') },
       { type: 'separator' },
       { label: 'Find in Page…', accelerator: 'CmdOrCtrl+F', click: openFind },
       { label: 'Print…', accelerator: 'CmdOrCtrl+P', click: () => t.view.webContents.print() },
@@ -589,7 +916,7 @@ function popupMenu(kind) {
       ] },
       { label: 'Settings', accelerator: 'CmdOrCtrl+,', click: () => openInternal('settings') },
       { label: 'Developer Tools', click: () => t.view.webContents.openDevTools({ mode: 'detach' }) },
-      { label: 'Burn All Tabs and Data…', click: fire },
+      { label: 'Eject to Lethe…', click: () => eject('all') },
       { type: 'separator' },
       { label: 'About Lethe', click: () => dialog.showMessageBox(win, { message: 'Lethe', detail: `Version ${app.getVersion()}\nΛήθη — forget instantly.\nPrivate by default. Search powered by DuckDuckGo.` }) }
     ];
@@ -610,7 +937,7 @@ function buildAppMenu() {
         { label: 'Open Location', accelerator: 'CmdOrCtrl+L', click: () => { win.webContents.focus(); win.webContents.send('focus-address'); } },
         { type: 'separator' },
         { label: 'Print…', accelerator: 'CmdOrCtrl+P', click: () => nav().print() },
-        { label: 'Burn All Tabs and Data…', accelerator: 'CmdOrCtrl+Shift+Backspace', click: fire },
+        { label: 'Eject to Lethe…', accelerator: 'CmdOrCtrl+Shift+Backspace', click: () => eject('all') },
         ...(isMac ? [] : [{ label: 'Settings', accelerator: 'Ctrl+,', click: () => openInternal('settings') }, { role: 'quit' }])
       ]
     },
@@ -620,6 +947,11 @@ function buildAppMenu() {
       submenu: [
         { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => nav().reload() },
         { label: 'Find in Page', accelerator: 'CmdOrCtrl+F', click: openFind },
+        { label: 'Command Palette…', accelerator: 'CmdOrCtrl+K', click: openPalette },
+        { label: 'Reader Mode', accelerator: 'CmdOrCtrl+Shift+R', click: openReader },
+        { label: 'Zap Element…', accelerator: 'CmdOrCtrl+Shift+X', click: zapElement },
+        { label: 'Vertical Tabs', type: 'checkbox', checked: isVertical(), click: () => setLayout(isVertical() ? 'horizontal' : 'vertical') },
+        { type: 'separator' },
         { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: () => zoom(0.5) },
         { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => zoom(-0.5) },
         { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => zoom(0) },
@@ -634,7 +966,8 @@ function buildAppMenu() {
         { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: () => nav().navigationHistory.goForward() },
         { type: 'separator' },
         { label: 'Show All History', accelerator: 'CmdOrCtrl+Y', click: () => openInternal('history') },
-        { label: 'Downloads', accelerator: 'CmdOrCtrl+Shift+J', click: () => openInternal('downloads') }
+        { label: 'Downloads', accelerator: 'CmdOrCtrl+Shift+J', click: () => openInternal('downloads') },
+        { label: 'Privacy Report', click: () => openInternal('report') }
       ]
     },
     {
@@ -651,12 +984,86 @@ function buildAppMenu() {
       submenu: [
         { label: 'Next Tab', accelerator: 'Ctrl+Tab', click: () => cycleTab(1) },
         { label: 'Previous Tab', accelerator: 'Ctrl+Shift+Tab', click: () => cycleTab(-1) },
+        { label: 'Pin / Unpin Tab', click: () => { const t = activeTab(); if (t) pinTab(t.id, !t.pinned); } },
         ...Array.from({ length: 8 }, (_, i) => ({ label: `Tab ${i + 1}`, accelerator: `CmdOrCtrl+${i + 1}`, click: () => tabs[i] && activateTab(tabs[i].id) }))
       ]
     },
     { role: 'windowMenu' }
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(tpl));
+}
+
+// ---------- Eject menu + command palette ----------
+function ejectMenu() {
+  hideSuggest();
+  const site = currentSite();
+  Menu.buildFromTemplate([
+    { label: 'Eject to Lethe…  (close all tabs, erase everything)', accelerator: 'CmdOrCtrl+Shift+Backspace', click: () => eject('all') },
+    { type: 'separator' },
+    { label: 'Forget the last hour', click: () => eject('hour') },
+    { label: 'Forget the last day', click: () => eject('day') },
+    { label: site ? `Forget ${site} only` : 'Forget this site only', enabled: !!site, click: () => eject('site') },
+    { type: 'separator' },
+    { label: 'Eject settings…', click: () => openInternal('settings') }
+  ]).popup({ window: win });
+}
+
+function toggleSetting(key) {
+  applySetting(settings, key, !getSetting(key)); saveJSON('settings', settings);
+  if (key === 'location.spoof') applyLocationAll();
+  const t = activeTab(); if (t && !isInternal(t.url)) t.view.webContents.reload();
+  pushState();
+}
+function buildPaletteItems() {
+  const t = activeTab(), items = []; let n = 0;
+  const on = k => (getSetting(k) ? 'on' : 'off');
+  const act = (label, hint, run, sub = '') => items.push({ id: 'a' + n++, kind: 'action', label, sub, hint, run });
+  act('New Tab', 'Cmd/Ctrl+T', () => createTab());
+  act('Reopen Closed Tab', 'Cmd/Ctrl+Shift+T', reopenTab);
+  act('Settings', 'Cmd/Ctrl+,', () => openInternal('settings'));
+  act('History', '', () => openInternal('history'));
+  act('Bookmarks', '', () => openInternal('bookmarks'));
+  act('Downloads', '', () => openInternal('downloads'));
+  act('Privacy Report', 'last 7 days', () => openInternal('report'));
+  act('Eject to Lethe…', 'erase everything', () => eject('all'));
+  act('Forget the last hour', '', () => eject('hour'));
+  act('Forget the last day', '', () => eject('day'));
+  if (currentSite()) act(`Forget ${currentSite()} only`, '', () => eject('site'));
+  if (t && !isInternal(t.url)) {
+    act('Reader Mode', 'Cmd/Ctrl+Shift+R', openReader);
+    act('Zap Element…', 'hide something on this page', zapElement);
+    act('Bookmark This Page', 'Cmd/Ctrl+D', toggleBookmark);
+    if (currentSite()) act(`Site rules for ${currentSite()}…`, '', () => openInternal('settings?site=' + encodeURIComponent(currentSite())));
+  }
+  act(`Vertical tabs: switch to ${isVertical() ? 'horizontal' : 'vertical'}`, '', () => setLayout(isVertical() ? 'horizontal' : 'vertical'));
+  if (t) act(t.pinned ? 'Unpin this tab' : 'Pin this tab', '', () => pinTab(t.id, !t.pinned));
+  act(`No JavaScript (${on('content.noJs')}) — toggle`, '', () => toggleSetting('content.noJs'));
+  act(`No CSS (${on('content.noCss')}) — toggle`, '', () => toggleSetting('content.noCss'));
+  act(`No images (${on('content.noImages')}) — toggle`, '', () => toggleSetting('content.noImages'));
+  act(`Spoof location (${on('location.spoof')}) — toggle`, '', () => toggleSetting('location.spoof'));
+  act('Find in Page', 'Cmd/Ctrl+F', openFind);
+  for (const x of tabs) items.push({ id: 't' + x.id, kind: 'tab', label: x.title || displayUrl(x) || 'New Tab', sub: displayUrl(x), run: () => activateTab(x.id) });
+  bookmarks.slice(0, 80).forEach((b, i) => items.push({ id: 'b' + i, kind: 'bookmark', label: b.title || b.url, sub: b.url, run: () => createTab(b.url, true) }));
+  history.slice(0, 120).forEach((h, i) => items.push({ id: 'h' + i, kind: 'history', label: h.title || h.url, sub: h.url, run: () => createTab(h.url, true) }));
+  return items;
+}
+function openPalette() {
+  if (!paletteView) return;
+  if (palette.shown) return closePalette();
+  hideSuggest();
+  const [w, h] = win.getContentSize();
+  paletteView.setBounds({ x: 0, y: 0, width: w, height: h });
+  win.contentView.addChildView(paletteView);
+  palette.shown = true;
+  palette.items = buildPaletteItems();
+  paletteView.webContents.send('palette:open', palette.items.map(({ id, kind, label, sub, hint }) => ({ id, kind, label, sub, hint })));
+  paletteView.webContents.focus();
+}
+function runPalette(arg) {
+  closePalette();
+  const it = palette.items.find(x => x.id === (arg && arg.id));
+  if (it) { try { it.run(); } catch { /* ignore */ } return; }
+  if (arg && typeof arg.text === 'string' && arg.text.trim()) { const t = activeTab(); if (t) { t.view.webContents.loadURL(normalizeInput(arg.text)).catch(() => {}); t.view.webContents.focus(); } }
 }
 
 // ---------- bookmarks import/export ----------
@@ -693,7 +1100,16 @@ ipcMain.on('cmd', (_e, name, arg) => {
     case 'new-tab': createTab(); break;
     case 'close-tab': closeTab(arg); break;
     case 'select-tab': activateTab(arg); break;
-    case 'fire': fire(); break;
+    case 'eject-menu': ejectMenu(); break;
+    case 'fire': eject('all'); break;
+    case 'tab-menu': tabMenu(arg); break;
+    case 'group-menu': groupMenu(arg); break;
+    case 'group-toggle': { const g = groups.find(x => x.id === arg); if (g) { g.collapsed = !g.collapsed; pushState(); } break; }
+    case 'group-rename': { const g = groups.find(x => x.id === (arg && arg.id)); if (g && typeof arg.name === 'string') { g.name = arg.name.trim().slice(0, 30) || g.name; pushState(); } break; }
+    case 'move-tab': if (arg) moveTab(arg.id, arg.before); break;
+    case 'palette': openPalette(); break;
+    case 'palette-run': runPalette(arg); break;
+    case 'palette-close': closePalette(); break;
     case 'bookmark': toggleBookmark(); break;
     case 'menu': popupMenu(arg); break;
     case 'suggest': updateSuggest(String(arg.text || ''), { x: +arg.x || 0, w: +arg.w || 400 }); break;
@@ -723,7 +1139,7 @@ ipcMain.on('cmd', (_e, name, arg) => {
 // ---------- IPC: internal pages ----------
 ipcMain.on('lethe:origin', e => { e.returnValue = ORIGIN; });
 // Lets the page preload ask for the DuckDuckGo-browser UA (only ever used on duckduckgo.com pages).
-ipcMain.on('lethe:uaInfo', e => { e.returnValue = curUA.spoofed ? { ua: curUA.ua, platform: curUA.platform || '', vendor: curUA.vendor || '', hideCH: curUA.hideCH, chromeMajor: curUA.chromeMajor || 0, chPlatform: curUA.chPlatform || '', mobile: !!curUA.mobile } : null; });
+ipcMain.on('lethe:uaInfo', (e, host) => { e.returnValue = uaInfoFor(String(host || '')); });
 ipcMain.on('lethe:ddgHint', e => { e.returnValue = settings.general.ddgBrowserHint && !(DEV && process.env.LETHE_NO_HINT) ? DDG_UA : ''; });
 
 const handlers = {
@@ -739,6 +1155,8 @@ const handlers = {
     else if (key === 'location.tz') settings.location.preset = 'custom';
     if (key.startsWith('userAgent.')) { applyUserAgent(); applyUAAll(); }
     if (key.startsWith('location.')) applyLocationAll();
+    if (key === 'tabs.layout') layout();
+    if (key.startsWith('forget.')) persistVisits();
     saveJSON('settings', settings);
     if (key.startsWith('appearance.preset') || key.startsWith('appearance.custom')) applyTheme();
     pushState();
@@ -770,7 +1188,36 @@ const handlers = {
   'downloads:list': () => downloads,
   'downloads:show': id => { const d = downloads.find(x => x.id === id); if (d && d.path) shell.showItemInFolder(d.path); return true; },
   'downloads:clear': () => { downloads = downloads.filter(d => d.state === 'progressing'); return true; },
-  fire: () => { fire(); return true; },
+  fire: () => { eject('all'); return true; },
+  'eject:run': scope => { if (!['all', 'hour', 'day', 'site'].includes(scope)) return false; eject(scope); return true; },
+  'stats:report': days => stats.report(Math.min(30, Math.max(1, +days || 7))),
+  'stats:clear': () => { stats.clear(); return true; },
+  'forget:addClose': site => {
+    const host = String(site || '').trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0], s = siteOf(host);
+    if (!SITE_RE.test(s)) return false;
+    if (!settings.forget.onCloseSites.includes(s)) settings.forget.onCloseSites.push(s);
+    saveJSON('settings', settings); return true;
+  },
+  'forget:removeClose': site => { settings.forget.onCloseSites = settings.forget.onCloseSites.filter(x => x !== site); saveJSON('settings', settings); return true; },
+  'filters:add': async ({ url, name }) => { try { await addFilterList(String(url || ''), name); return { ok: true }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; } },
+  'filters:toggle': id => { const l = settings.filters.lists.find(x => x.id === id); if (!l) return false; l.enabled = !l.enabled; saveJSON('settings', settings); loadFilterLists(); return true; },
+  'filters:remove': id => {
+    settings.filters.lists = settings.filters.lists.filter(x => x.id !== id);
+    try { fs.unlinkSync(path.join(filtersDir(), String(id).replace(/[^\w]/g, '') + '.txt')); } catch { /* ignore */ }
+    saveJSON('settings', settings); loadFilterLists(); return true;
+  },
+  'filters:update': async () => ({ updated: await updateFilterLists(false) }),
+  'zapped:list': () => Object.entries(zapped).flatMap(([host, sels]) => sels.map(selector => ({ host, selector }))),
+  'zapped:remove': ({ host, selector }) => { if (!zapped[host]) return false; zapped[host] = zapped[host].filter(x => x !== selector); if (!zapped[host].length) delete zapped[host]; saveJSON('zapped', zapped); return true; },
+  'siteRule:set': ({ site, rule }) => {
+    const host = String(site || '').trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0], s = siteOf(host);
+    if (!SITE_RE.test(s)) return false;
+    const r = normalizeRule(rule);
+    if (Object.keys(r).length) settings.siteRules[s] = r; else delete settings.siteRules[s];
+    saveJSON('settings', settings); pushState(); return true;
+  },
+  'siteRule:remove': site => { delete settings.siteRules[site]; saveJSON('settings', settings); pushState(); return true; },
+  'reader:get': id => readerDocs.get(+id) || null,
   go: (text, e) => { const t = tabByWcId(e.sender.id); if (t) t.view.webContents.loadURL(normalizeInput(text)).catch(() => {}); return true; },
   'player:meta': async id => {
     if (!/^[\w-]{11}$/.test(String(id))) return null;
@@ -803,6 +1250,13 @@ function createWindow() {
   suggestView.webContents.loadFile(path.join(__dirname, 'ui', 'suggest.html'));
   suggestView.webContents.once('did-finish-load', () => suggestView.webContents.send('theme', theme));
 
+  ejectView = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true } });
+  ejectView.webContents.loadFile(path.join(__dirname, 'ui', 'eject.html'));
+  paletteView = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'ui', 'palette-preload.js'), sandbox: true, contextIsolation: true } });
+  paletteView.setBackgroundColor('#00000000');
+  paletteView.webContents.loadFile(path.join(__dirname, 'ui', 'palette.html'));
+  paletteView.webContents.once('did-finish-load', () => paletteView.webContents.send('theme', theme));
+
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
   win.on('resize', layout);
   win.on('enter-full-screen', layout);
@@ -817,16 +1271,33 @@ function createWindow() {
   });
 }
 
-// Developer hook: LETHE_SHOTS=<dir> saves screenshots of the chrome and active tab, then quits.
+// Developer hook: LETHE_SHOTS=<dir> saves screenshots of the chrome, active tab and any overlay, then quits.
+// LETHE_MAIN_EVAL=<js> runs in the main process first (e.g. to open the palette) and prints MAIN <result>.
+async function snap(wc) {
+  try { return (await wc.capturePage()).toPNG(); } catch {
+    // no display surface available (e.g. screen locked): fall back to a protocol-level screenshot
+    if (!wc.debugger.isAttached()) wc.debugger.attach('1.3');
+    const r = await wc.debugger.sendCommand('Page.captureScreenshot', { format: 'png' });
+    return Buffer.from(r.data, 'base64');
+  }
+}
 async function devShots(dir) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
-  fs.mkdirSync(dir, { recursive: true });
-  await wait(+(DEV && process.env.LETHE_WAIT) || 5000);
-  fs.writeFileSync(path.join(dir, 'chrome.png'), (await win.webContents.capturePage()).toPNG());
-  const t = activeTab();
-  if (t && (DEV && process.env.LETHE_EVAL)) { try { console.log('EVAL', JSON.stringify(await t.view.webContents.executeJavaScript((DEV && process.env.LETHE_EVAL)))); } catch (e) { console.log('EVAL_ERR', String(e)); } }
-  if (t) fs.writeFileSync(path.join(dir, 'tab.png'), (await t.view.webContents.capturePage()).toPNG());
-  console.log('TABS', JSON.stringify(tabs.map(x => ({ title: x.title, url: x.url, blocked: x.blocked }))));
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    await wait(+(DEV && process.env.LETHE_WAIT) || 5000);
+    if (DEV && process.env.LETHE_MAIN_EVAL) {
+      try { console.log('MAIN', JSON.stringify(await eval(process.env.LETHE_MAIN_EVAL))); } catch (e) { console.log('MAIN_ERR', String(e)); }
+      await wait(+(DEV && process.env.LETHE_AFTER) || 1200);
+    }
+    fs.writeFileSync(path.join(dir, 'chrome.png'), await snap(win.webContents));
+    const t = activeTab();
+    if (t && (DEV && process.env.LETHE_EVAL)) { try { console.log('EVAL', JSON.stringify(await t.view.webContents.executeJavaScript((DEV && process.env.LETHE_EVAL)))); } catch (e) { console.log('EVAL_ERR', String(e)); } }
+    if (t) fs.writeFileSync(path.join(dir, 'tab.png'), await snap(t.view.webContents));
+    if (palette.shown) fs.writeFileSync(path.join(dir, 'palette.png'), await snap(paletteView.webContents));
+    if (DEV && process.env.LETHE_SHOT_EJECT) fs.writeFileSync(path.join(dir, 'eject.png'), await snap(ejectView.webContents));
+    console.log('TABS', JSON.stringify(tabs.map(x => ({ title: x.title, url: x.url, blocked: x.blocked, pinned: x.pinned, group: x.group }))));
+  } catch (e) { console.log('SHOT_ERR', String(e)); }
   quitting = true; firedOnExit = true; app.quit();
 }
 
@@ -852,17 +1323,25 @@ app.whenReady().then(async () => {
   if ((DEV && process.env.LETHE_SETTINGS)) { try { const o = JSON.parse((DEV && process.env.LETHE_SETTINGS)); for (const [sec, vals] of Object.entries(o)) Object.assign(settings[sec], vals); } catch { /* ignore */ } }
   bookmarks = loadJSON('bookmarks', []);
   history = loadJSON('history', []);
+  stats.init(() => settings.stats.enabled);
+  visits = loadJSON('visits', {});
+  for (const [k, v] of Object.entries(visits)) if (!v || typeof v.t !== 'number' || Date.now() - v.t > 60 * 86400e3) delete visits[k];
+  zapped = loadJSON('zapped', {});
+  loadFilterLists();
   if (isMac && app.dock) app.dock.setIcon(ICON);
   setupPrivacy();
   applyTheme();
   nativeTheme.on('updated', () => { if (settings.appearance.preset === 'auto') applyTheme(); });
   buildAppMenu();
   createWindow();
+  setInterval(() => forgetStale().catch(() => {}), 10 * 60 * 1000);
+  setTimeout(() => { forgetStale().catch(() => {}); updateFilterLists(true).catch(() => {}); }, 25000);
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 
 app.on('before-quit', e => {
-  saveJSONNow('settings', settings); saveJSONNow('bookmarks', bookmarks); saveJSONNow('history', history);
+  saveJSONNow('settings', settings); saveJSONNow('bookmarks', bookmarks); saveJSONNow('history', history); saveJSONNow('zapped', zapped);
+  if (settings && (settings.privacy.saveHistory || settings.forget.afterHours > 0)) saveJSONNow('visits', visits);
   if (settings && settings.privacy.fireOnExit && !firedOnExit && !quitting) {
     e.preventDefault(); quitting = true;
     clearAllData().catch(() => {}).finally(() => { firedOnExit = true; app.quit(); });

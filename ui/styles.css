@@ -39,10 +39,39 @@ body.mac #tabbar { padding-left: 84px; }
 #blocked { font-weight: 600; font-size: 12px; }
 #star { width: 26px; height: 26px; }
 #star.on svg { fill: var(--accent); stroke: var(--accent); }
-#fire { color: var(--accent); }
+#toolbar > button.eject { width: auto; padding: 0 11px 0 8px; gap: 6px; height: 30px; border-radius: 15px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); font: 700 14px "Times New Roman", Georgia, "Palatino", serif; letter-spacing: .5px; }
+#toolbar > button.eject:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.eject svg { width: 18px; height: 18px; }
+#toast { position: fixed; top: 7px; left: 50%; transform: translateX(-50%); z-index: 9; max-width: 60vw; background: var(--fg); color: var(--bar); padding: 7px 14px; border-radius: 16px; font-weight: 600; box-shadow: 0 6px 24px rgba(0,0,0,.3); -webkit-app-region: no-drag; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#toast[hidden] { display: none; }
 
 #findbar { height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: var(--bar); border-bottom: 1px solid var(--border); }
 #findbar[hidden] { display: none; }
 #findinput { width: 260px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--field); color: var(--fg); padding: 0 8px; outline: 0; user-select: text; }
 #findbar button { width: 26px; height: 26px; }
 #findcount { color: var(--muted); min-width: 60px; }
+
+/* ---- pinned tabs, groups, drag ---- */
+#pins { display: flex; gap: 2px; align-items: flex-end; }
+.tab.pinned { min-width: 34px; max-width: 34px; flex: none; padding: 0; justify-content: center; }
+.tab.pinned .title, .tab.pinned .x { display: none; }
+.tab[draggable] { cursor: default; }
+.tab.dragover { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.tab[data-g] { box-shadow: inset 0 3px 0 var(--g); }
+.gchip { -webkit-app-region: no-drag; align-self: center; height: 22px; padding: 0 9px; margin: 0 3px; border-radius: 11px; color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; background: var(--g); white-space: nowrap; cursor: default; }
+.gchip input { all: unset; width: 90px; color: #fff; font: inherit; border-bottom: 1px solid rgba(255,255,255,.7); }
+.gchip.collapsed { opacity: .75; }
+
+/* ---- vertical tabs ---- */
+#toolbar > *, #omni, #address { -webkit-app-region: no-drag; }
+body.vertical #toolbar { -webkit-app-region: drag; }
+body.mac.vertical #toolbar { padding-left: 84px; }
+body.vertical #tabbar { position: fixed; left: 0; top: 44px; bottom: 0; width: 232px; height: auto; flex-direction: column; align-items: stretch; padding: 8px; gap: 6px; border-right: 1px solid var(--border); overflow-y: auto; -webkit-app-region: no-drag; }
+body.vertical #pins { flex-wrap: wrap; align-items: center; }
+body.vertical #pins:empty { display: none; }
+body.vertical #tabs { flex-direction: column; align-items: stretch; gap: 3px; flex: 0 0 auto; min-width: 0; }
+body.vertical .tab { max-width: none; flex: none; height: 34px; border-radius: 8px; padding: 0 6px 0 10px; }
+body.vertical .tab[data-g] { box-shadow: inset 3px 0 0 var(--g); }
+body.vertical .tab.pinned { border-radius: 8px; }
+body.vertical .gchip { align-self: flex-start; margin: 6px 0 2px; }
+body.vertical #newtab { width: 100%; height: 30px; margin-bottom: 0; border: 1px dashed var(--border); }

@@ -9,14 +9,14 @@ function loadJSON(name, fallback) {
   try { return JSON.parse(fs.readFileSync(file(name), 'utf8')); } catch { return fallback; }
 }
 function saveJSON(name, data) {
-  if (!require('electron').app.isPackaged && process.env.LETHE_SETTINGS && name === 'settings') return; // dev test overrides must never be persisted
+  if (!require('electron').app.isPackaged && process.env.LETHE_SETTINGS) return; // dev test overrides must never be persisted
   clearTimeout(timers[name]);
   timers[name] = setTimeout(() => {
     try { fs.writeFileSync(file(name), JSON.stringify(data)); } catch { /* ignore */ }
   }, 150);
 }
 function saveJSONNow(name, data) {
-  if (!require('electron').app.isPackaged && process.env.LETHE_SETTINGS && name === 'settings') return;
+  if (!require('electron').app.isPackaged && process.env.LETHE_SETTINGS) return;
   clearTimeout(timers[name]);
   try { fs.writeFileSync(file(name), JSON.stringify(data)); } catch { /* ignore */ }
 }

@@ -23,5 +23,13 @@
       box.append(a);
     });
   }
+  try {
+    const r = await lethe.call('stats:report', 7);
+    if (r.enabled && r.totals.blocked > 0) {
+      const tag = document.querySelector('.tag');
+      tag.textContent = `This week: ${r.totals.blocked.toLocaleString()} tracker${r.totals.blocked === 1 ? '' : 's'} blocked · `;
+      tag.append(el('a', { href: 'lethe://report', textContent: 'View privacy report', style: 'color:inherit;text-decoration:underline' }));
+    }
+  } catch { /* keep the default line */ }
   $('q').focus();
 })();

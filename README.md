@@ -6,10 +6,14 @@
 
 ## Features
 - **Protections:** third-party tracker blocking, smarter HTTPS upgrades, Global Privacy Control, third-party cookie blocking, link-tracking parameter removal, a cookie pop-up manager (only ever rejects), per-site protection toggles.
-- **Fire Button** (Ctrl/Cmd+Shift+Backspace): closes every tab and erases history, cookies, cache and site data. Fireproof sites keep their cookies. Optional clear-on-exit.
+- **Eject to Lethe** (Ctrl/Cmd+Shift+Backspace): throws every tab and all your history, cookies, cache and site data into the river, with an animation. Fireproof sites keep their cookies. Also: **forget the last hour or day**, **forget one site**, **auto-forget** sites after a set time, and **forget a site when its tab closes**.
 - **Lethe Player:** watch YouTube through its privacy-enhanced embed, without personalized ads. Ask / always / never.
 - **Themes** (presets + custom colors), New Tab backgrounds, bookmarks with favorites, history, downloads, address-bar suggestions, reopen closed tab.
 - **Content controls:** No CSS, No images, No JavaScript.
+- **Filter lists + element zapper:** add EasyPrivacy/EasyList (or your own list; a practical subset of the Adblock syntax) and click any page element to hide it for good (Ctrl/Cmd+Shift+X).
+- **Per-site rules:** a user agent, fake location, and JavaScript/CSS/image blocking for individual sites.
+- **Privacy Report:** local, per-day counts of what was blocked (never the sites you visit).
+- **Command palette** (Ctrl/Cmd+K), **pinned tabs, tab groups and vertical tabs**, and **Reader mode** (papyrus/light/dark themes, text-to-speech with your system voices).
 - **Spoof location:** pick a place from a map (time zone follows) and choose a **user agent** (Chrome, Safari, Firefox, iPhone, Android or custom).
 - Internal pages use the `lethe://` scheme: `lethe://settings`, `lethe://history`, `lethe://bookmarks`, `lethe://downloads`.
 
@@ -34,7 +38,7 @@ npm run dist         # package for the current OS (output in dist/)
 Releases are built by GitHub Actions (`.github/workflows/build.yml`) on Windows and Ubuntu runners when a `v*` tag is pushed.
 
 ## What it contacts
-Only what you use: your search engine (DuckDuckGo by default, plus suggestions if enabled), the sites you visit, YouTube when you use the Player, and OpenStreetMap tiles only while the location map is open. There is no telemetry and no account.
+Only what you use: your search engine, any filter-list address you add (re-checked weekly), (DuckDuckGo by default, plus suggestions if enabled), the sites you visit, YouTube when you use the Player, and OpenStreetMap tiles only while the location map is open. There is no telemetry and no account.
 
 ## Honest limits
 - "Spoof location" does **not** hide your IP address; use a VPN for that.

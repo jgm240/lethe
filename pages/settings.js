@@ -79,6 +79,7 @@ function render() {
   $('uaCurrent').textContent = D.uaCurrent;
   // map
   syncMap();
+  renderExtras();
   chips($('fp'), s.privacy.fireproofSites, 'fireproofSites');
   chips($('up'), s.privacy.unprotectedSites, 'unprotectedSites');
 }
@@ -122,3 +123,93 @@ $('mapBtn').onclick = () => {
   if ($('mapBox').style.display === 'none') openMap();
   else { $('mapBox').style.display = 'none'; $('mapBtn').textContent = 'Open map'; }
 };
+
+// ---- Eject & Forget, Filters, Site rules, Tabs ----
+function chipList(box, list, onRemove) {
+  box.replaceChildren();
+  if (!list.length) return box.append(el('span', { className: 'muted', textContent: 'None' }));
+  for (const item of list) {
+    const x = el('button', { className: 'x', textContent: '✕', title: 'Remove' }); x.onclick = () => onRemove(item);
+    box.append(el('span', { className: 'chip' }, item, x));
+  }
+}
+const when = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function ruleSummary(r) {
+  const out = [];
+  if (r.userAgent) out.push('UA: ' + ((D.uaPresets.find(p => p.id === r.userAgent) || {}).name || r.userAgent));
+  if (r.location) out.push('Location: ' + (r.location === 'off' ? 'real' : (D.locations.find(l => l.id === r.location) || {}).name || r.location));
+  for (const [k, n] of [['noJs', 'JavaScript'], ['noCss', 'CSS'], ['noImages', 'Images']]) if (typeof r[k] === 'boolean') out.push(n + (r[k] ? ' blocked' : ' allowed'));
+  return out.join(' · ');
+}
+function loadRuleIntoEditor(site) {
+  const r = D.settings.siteRules[site] || {};
+  $('ruleSite').value = site;
+  $('ruleUa').value = r.userAgent || ''; $('ruleLoc').value = r.location || '';
+  for (const [id, key] of [['ruleJs', 'noJs'], ['ruleCss', 'noCss'], ['ruleImg', 'noImages']]) $(id).value = r[key] === true ? 'on' : r[key] === false ? 'off' : '';
+  $('ruleMsg').textContent = '';
+}
+async function refreshZaps() {
+  const zaps = await lethe.call('zapped:list'), box = $('zaps'); box.replaceChildren();
+  if (!zaps.length) return box.append(el('span', { className: 'muted', textContent: 'Nothing hidden yet.' }));
+  for (const z of zaps) {
+    const x = el('button', { className: 'x', textContent: '✕', title: 'Show it again' });
+    x.onclick = async () => { await lethe.call('zapped:remove', z); refreshZaps(); };
+    box.append(el('div', { className: 'it', style: 'display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)' }, el('div', { style: 'flex:1;min-width:0' }, el('div', { textContent: z.host }), el('div', { className: 'muted', style: 'font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis', textContent: z.selector })), x));
+  }
+}
+let extrasBound = false;
+function renderExtras() {
+  const s = D.settings;
+  $('tabLayout').value = s.tabs.layout; $('tabLayout').onchange = () => setKey('tabs.layout', $('tabLayout').value);
+  $('afterHours').value = String(s.forget.afterHours); $('afterHours').onchange = () => setKey('forget.afterHours', +$('afterHours').value);
+  chipList($('closeList'), s.forget.onCloseSites, async site => { await lethe.call('forget:removeClose', site); load(); });
+  // filter lists
+  const box = $('lists'); box.replaceChildren();
+  for (const l of s.filters.lists) {
+    const sw = el('label', { className: 'switch' }, el('input', { type: 'checkbox', checked: l.enabled }), el('span'));
+    sw.firstChild.onchange = async () => { await lethe.call('filters:toggle', l.id); load(); };
+    const del = el('button', { className: 'x', textContent: '✕', title: 'Remove list' }); del.onclick = async () => { await lethe.call('filters:remove', l.id); load(); };
+    box.append(el('div', { className: 'row' }, el('div', { className: 'txt' }, el('div', { className: 't', textContent: l.name }), el('div', { className: 'd', textContent: `${l.count.toLocaleString()} rules understood · updated ${when(l.updated)} · ${l.url}` })), sw, del));
+  }
+  // site rules
+  const ua = $('ruleUa'); ua.replaceChildren(el('option', { value: '', textContent: 'Inherit' }));
+  for (const p of D.uaPresets.filter(p => p.id !== 'custom')) ua.append(el('option', { value: p.id, textContent: p.name }));
+  const loc = $('ruleLoc'); loc.replaceChildren(el('option', { value: '', textContent: 'Inherit' }), el('option', { value: 'off', textContent: 'Real location' }));
+  for (const l of D.locations) loc.append(el('option', { value: l.id, textContent: l.name }));
+  const rb = $('rules'); rb.replaceChildren();
+  const entries = Object.entries(s.siteRules);
+  if (!entries.length) rb.append(el('div', { className: 'row' }, el('span', { className: 'muted', textContent: 'No site rules yet.' })));
+  for (const [site, r] of entries) {
+    const edit = el('button', { className: 'btn', textContent: 'Edit' }); edit.onclick = () => { loadRuleIntoEditor(site); window.scrollTo(0, 0); };
+    rb.append(el('div', { className: 'row' }, el('div', { className: 'txt' }, el('div', { className: 't', textContent: site }), el('div', { className: 'd', textContent: ruleSummary(r) })), edit));
+  }
+  if (extrasBound) return; extrasBound = true;
+  $('closeAdd').onclick = async () => { const ok = await lethe.call('forget:addClose', $('closeSite').value); $('closeSite').style.borderColor = ok ? '' : '#c0392b'; if (ok) { $('closeSite').value = ''; load(); } };
+  $('fhour').onclick = () => lethe.call('eject:run', 'hour'); $('fday').onclick = () => lethe.call('eject:run', 'day'); $('ejectNow').onclick = () => lethe.call('eject:run', 'all');
+  const add = async (url, name, btn) => {
+    const old = btn.textContent; btn.disabled = true; btn.textContent = 'Downloading…'; $('listMsg').textContent = '';
+    const r = await lethe.call('filters:add', { url, name });
+    btn.disabled = false; btn.textContent = old;
+    $('listMsg').textContent = r.ok ? 'List added.' : 'Couldn’t add the list: ' + r.error; if (r.ok) { $('listUrl').value = ''; await load(); }
+  };
+  $('addEP').onclick = e => add('https://easylist.to/easylist/easyprivacy.txt', 'EasyPrivacy', e.target);
+  $('addEL').onclick = e => add('https://easylist.to/easylist/easylist.txt', 'EasyList', e.target);
+  $('listAdd').onclick = e => add($('listUrl').value.trim(), '', e.target);
+  $('listUpdate').onclick = async e => { e.target.disabled = true; e.target.textContent = 'Updating…'; const r = await lethe.call('filters:update'); e.target.disabled = false; e.target.textContent = 'Update'; $('listMsg').textContent = `${r.updated} list${r.updated === 1 ? '' : 's'} updated.`; await load(); };
+  $('ruleSave').onclick = async () => {
+    const rule = {}; if ($('ruleUa').value) rule.userAgent = $('ruleUa').value; if ($('ruleLoc').value) rule.location = $('ruleLoc').value;
+    for (const [id, key] of [['ruleJs', 'noJs'], ['ruleCss', 'noCss'], ['ruleImg', 'noImages']]) { const v = $(id).value; if (v) rule[key] = v === 'on'; }
+    const ok = await lethe.call('siteRule:set', { site: $('ruleSite').value, rule });
+    $('ruleMsg').textContent = ok ? (Object.keys(rule).length ? 'Saved. Reload the site to apply it.' : 'Rule removed (nothing set).') : 'Enter a valid site such as example.com.';
+    if (ok) await load();
+  };
+  $('ruleDelete').onclick = async () => { const site = $('ruleSite').value.trim().toLowerCase(); await lethe.call('siteRule:remove', site.replace(/^www\./, '')); $('ruleMsg').textContent = 'Rule removed.'; await load(); };
+  refreshZaps();
+}
+// open with ?site=… (from the shield menu): jump to the site-rule editor
+(() => {
+  const site = new URLSearchParams(location.search).get('site');
+  if (!site) return;
+  const go = () => { if (!D) return setTimeout(go, 100); document.querySelector('nav button[data-s="sites"]').click(); loadRuleIntoEditor(site); };
+  go();
+})();

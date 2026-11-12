@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="tabbar"><div id="tabs"></div><button id="newtab" title="New Tab (Ctrl/Cmd+T)">+</button></div>
+  <div id="tabbar"><div id="pins"></div><div id="tabs"></div><button id="newtab" title="New Tab (Ctrl/Cmd+T)">+</button></div>
   <div id="toolbar">
     <button id="back" title="Back"></button>
     <button id="forward" title="Forward"></button>
@@ -17,10 +17,11 @@
       <input id="address" type="text" spellcheck="false" autocomplete="off" placeholder="Search DuckDuckGo or enter address">
       <button id="star" title="Bookmark this page"></button>
     </div>
-    <button id="fire" title="Burn all tabs and data"></button>
+    <button id="fire" class="eject" title="Eject to Lethe — forget everything"></button>
     <button id="bookmarks" title="Bookmarks"></button>
     <button id="menu" title="Menu"></button>
   </div>
+  <div id="toast" hidden></div>
   <div id="findbar" hidden>
     <input id="findinput" type="text" placeholder="Find in page" spellcheck="false">
     <span id="findcount"></span>

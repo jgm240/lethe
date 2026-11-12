@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src * data:">
+<title>InstaOlvidar Browser</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="tabbar"><div id="tabs"></div><button id="newtab" title="New Tab (Ctrl/Cmd+T)">+</button></div>
+  <div id="toolbar">
+    <button id="back" title="Back"></button>
+    <button id="forward" title="Forward"></button>
+    <button id="reload" title="Reload"></button>
+    <div id="omni">
+      <button id="shield" title="Privacy protections"><span id="lock"></span><span id="blocked"></span></button>
+      <input id="address" type="text" spellcheck="false" autocomplete="off" placeholder="Search DuckDuckGo or enter address">
+      <button id="star" title="Bookmark this page"></button>
+    </div>
+    <button id="fire" title="Burn all tabs and data"></button>
+    <button id="bookmarks" title="Bookmarks"></button>
+    <button id="menu" title="Menu"></button>
+  </div>
+  <div id="findbar" hidden>
+    <input id="findinput" type="text" placeholder="Find in page" spellcheck="false">
+    <span id="findcount"></span>
+    <button id="findprev">&#8593;</button><button id="findnext">&#8595;</button><button id="findclose">&#10005;</button>
+  </div>
+  <script src="ui.js"></script>
+</body>
+</html>

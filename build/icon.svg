@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2f77"/>
+      <stop offset="1" stop-color="#0f1033"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="0.5" stop-color="#ff7a45"/>
+      <stop offset="1" stop-color="#e8423d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.5">
+      <stop offset="0" stop-color="#ff7a45" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ff7a45" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#glow)"/>
+  <!-- flame -->
+  <path d="M512 196c26 118 168 186 168 346 0 100-72 182-168 182s-168-82-168-182c0-70 34-112 70-148 6 42 28 70 54 82-20-92 6-186 44-280z" fill="url(#flame)"/>
+  <path d="M512 440c14 56 82 88 82 164 0 52-36 92-82 92s-82-40-82-92c0-34 18-54 36-70 4 22 14 34 28 40-8-48 4-90 18-134z" fill="#fff3d6" opacity="0.92"/>
+  <!-- dissolving particles: "forget instantly" -->
+  <g fill="#ffb27a">
+    <circle cx="640" cy="250" r="16" opacity="0.9"/>
+    <circle cx="700" cy="200" r="11" opacity="0.7"/>
+    <circle cx="590" cy="170" r="9" opacity="0.6"/>
+    <circle cx="745" cy="290" r="8" opacity="0.5"/>
+    <circle cx="345" cy="270" r="13" opacity="0.8"/>
+    <circle cx="300" cy="215" r="8" opacity="0.55"/>
+    <circle cx="410" cy="180" r="7" opacity="0.5"/>
+  </g>
+  <!-- base arc -->
+  <path d="M300 800h424" stroke="#ffffff" stroke-opacity="0.18" stroke-width="18" stroke-linecap="round"/>
+</svg>

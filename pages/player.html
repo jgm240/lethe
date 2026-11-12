@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; frame-src https://www.youtube-nocookie.com">
+<title>InstaOlvidar Player</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { background:#06060f; }
+  .wrap { max-width:1180px; margin:0 auto; padding:22px 24px 60px; }
+  .top { display:flex; align-items:center; gap:12px; margin-bottom:16px; color:#fff; }
+  .top .mark { width:34px; height:34px; display:block; }
+  .top b { font-size:15px; } .top .sp { flex:1; }
+  .badge { font-size:12px; color:#9fe0b0; border:1px solid #2c6b3f; background:rgba(60,160,90,.12); padding:4px 10px; border-radius:20px; }
+  .stage { position:relative; aspect-ratio:16/9; width:100%; background:#000; border-radius:14px; overflow:hidden; box-shadow:0 18px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06); }
+  .stage iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .meta { color:#fff; margin-top:18px; } .meta h1 { font-size:22px; margin:0 0 4px; } .meta .by { color:#a4a2bd; }
+  .bar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:18px; }
+  .bar .btn { color:#fff; background:#14142e; border-color:#33356a; }
+  .bar .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); }
+  .bar select { background:#14142e; color:#fff; } .bar label { color:#a4a2bd; font-size:13px; }
+  .err { color:#fff; padding:80px 0; text-align:center; }
+</style></head>
+<body><div class="wrap" id="root">
+  <div class="top"><img class="mark" src="/icon.png" alt=""><b>InstaOlvidar Player</b><span class="sp"></span><span class="badge">Privacy-enhanced mode · no tracking cookies</span></div>
+  <div id="stage" class="stage"></div>
+  <div class="meta"><h1 id="title"></h1><div class="by" id="by"></div></div>
+  <div class="bar">
+    <a class="btn primary" id="yt" target="_self">Watch on YouTube</a>
+    <label>When opening YouTube links: <select id="pm"><option value="ask">Ask me</option><option value="always">Always use the Player</option><option value="never">Never use the Player</option></select></label>
+  </div>
+</div>
+<script src="common.js"></script><script src="player.js"></script></body></html>

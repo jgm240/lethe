@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>
+  :root { --bar:#1f2048; --fg:#f4f4f7; --muted:#a4a2bd; --border:#33356a; --hover:rgba(255,255,255,.1); --accent:#e8663d; }
+  html,body { margin:0; background:transparent; font:14px -apple-system,"Segoe UI",system-ui,sans-serif; user-select:none; }
+  #box { background:var(--bar); color:var(--fg); border:1px solid var(--border); border-radius:14px; padding:4px; box-shadow:0 12px 32px rgba(0,0,0,.35); overflow:hidden; }
+  .it { display:flex; align-items:center; gap:10px; height:34px; padding:0 10px; border-radius:9px; cursor:default; }
+  .it.sel, .it:hover { background:var(--hover); }
+  .k { width:18px; text-align:center; color:var(--accent); flex:none; }
+  .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .s { color:var(--muted); font-size:12px; flex:none; max-width:40%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+</style></head>
+<body><div id="box"></div>
+<script>
+const box = document.getElementById('box');
+const ICON = { search: '⌕', url: '→', bookmark: '★', history: '↺' };
+sug.onTheme(t => { for (const [k, v] of Object.entries(t.vars)) document.documentElement.style.setProperty('--' + k.replace(/[A-Z]/g, m => '-' + m.toLowerCase()), v); });
+sug.onItems(({ items, sel }) => {
+  box.replaceChildren();
+  items.forEach((it, i) => {
+    const row = document.createElement('div'); row.className = 'it' + (i === sel ? ' sel' : '');
+    const k = Object.assign(document.createElement('span'), { className: 'k', textContent: ICON[it.kind] || '•' });
+    const t = Object.assign(document.createElement('span'), { className: 't', textContent: it.label });
+    row.append(k, t);
+    if (it.sub) row.append(Object.assign(document.createElement('span'), { className: 's', textContent: it.sub }));
+    row.addEventListener('mousedown', e => { e.preventDefault(); sug.choose(i); });
+    box.append(row);
+  });
+});
+</script></body></html>

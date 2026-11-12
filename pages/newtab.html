@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:">
+<title>New Tab</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { background:var(--bg) center bottom / cover no-repeat; min-height:100vh; }
+  body.bg { background-image:var(--bgimg); background-position:left bottom; }
+  body.bg::before { content:""; position:fixed; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.22)); pointer-events:none; }
+  main { position:relative; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:0 4vw 18vh; }
+  body.right main { padding-left:42vw; }
+  .logo { display:flex; align-items:center; gap:14px; font-size:40px; font-weight:700; letter-spacing:-1px; }
+  body.bg .logo, body.bg .tag { text-shadow:0 2px 18px rgba(0,0,0,.5); } body.bg .logo { color:#fff; }
+  .mark { width:64px; height:64px; display:block; filter:drop-shadow(0 4px 18px rgba(0,0,0,.45)); }
+  form { width:min(560px,100%); }
+  #q { width:100%; height:52px; border-radius:26px; border:1px solid color-mix(in srgb, var(--fg) 25%, transparent); background:color-mix(in srgb, var(--bar) 62%, transparent); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); font-size:17px; padding:0 24px; outline:0; }
+  body.bg #q { color:#fff; background:rgba(14,14,40,.55); } body.bg #q::placeholder { color:rgba(255,255,255,.7); }
+  #q:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .tag { color:var(--muted); font-size:14px; text-align:center; } body.bg .tag { color:rgba(255,255,255,.75); }
+  #favs { display:grid; grid-template-columns:repeat(4, 112px); gap:14px; justify-content:center; }
+  .fav { display:flex; flex-direction:column; align-items:center; gap:8px; padding:12px 6px; border-radius:14px; color:var(--fg); text-decoration:none; background:color-mix(in srgb, var(--bar) 55%, transparent); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
+  body.bg .fav { color:#fff; background:rgba(14,14,40,.5); } .fav:hover { background:color-mix(in srgb, var(--bar) 85%, transparent); text-decoration:none; }
+  .fav .ic { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; font-size:20px; font-weight:700; color:#fff; }
+  .fav .nm { font-size:12.5px; max-width:100px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  @media (max-width:900px) { body.right main { padding-left:6vw; } #favs { grid-template-columns:repeat(2, 112px); } }
+</style></head>
+<body>
+<main>
+  <div class="logo"><img class="mark" src="/icon.png" alt=""><span>InstaOlvidar</span></div>
+  <form id="f"><input id="q" type="text" placeholder="Search privately" autocomplete="off" autofocus></form>
+  <div id="favs"></div>
+  <div class="tag">Forget instantly. Trackers blocked · HTTPS upgraded · Nothing saved unless you bookmark it</div>
+</main>
+<script src="common.js"></script>
+<script src="newtab.js"></script>
+</body></html>

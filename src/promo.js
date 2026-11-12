@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const NOTE_TEXT = 'No browser promos - already using InstaOlvidar Browser';
+const NOTE_TEXT = 'No browser promos - already using Lethe';
 let svg = '';
 try { svg = fs.readFileSync(path.join(__dirname, '..', 'build', 'icon.svg'), 'utf8'); } catch { /* note works without the icon */ }
 
@@ -12,8 +12,8 @@ try { svg = fs.readFileSync(path.join(__dirname, '..', 'build', 'icon.svg'), 'ut
 const CSS = `[class*="cta-cards-module"], [class*="desktop-homepage-module"][class*="ctaSection"] { display: none !important; }`;
 
 const JS = `(() => {
-  if (window.__instaPromo) return;
-  window.__instaPromo = true;
+  if (window.__lethePromo) return;
+  window.__lethePromo = true;
   const NOTE = ${JSON.stringify(NOTE_TEXT)};
   const ICON = ${JSON.stringify(svg)};
   const BANNER = /^(download browser|install (mac |windows |ios |android |linux )?browser|upgrade to our private browser|get our free browser.*|switch to duckduckgo.*|set as default search)$/i;
@@ -22,7 +22,7 @@ const JS = `(() => {
 
   function makeNote() {
     const box = document.createElement('div');
-    box.id = 'instaolvidar-promo-note';
+    box.id = 'lethe-promo-note';
     box.style.cssText = 'display:flex;align-items:center;gap:12px;box-sizing:border-box;width:fit-content;max-width:min(92%,520px);margin:18px auto;padding:12px 18px 12px 12px;border-radius:14px;border:1px solid rgba(128,128,128,.35);background:rgba(128,128,128,.09);color:inherit;font:600 14px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;';
     if (ICON) {
       try {
@@ -44,10 +44,10 @@ const JS = `(() => {
   }
   function hide(el, replace) {
     const cand = block(el);
-    if (cand.dataset.instaHidden) return;
+    if (cand.dataset.letheHidden) return;
     cand.style.setProperty('display', 'none', 'important');
-    cand.dataset.instaHidden = '1';
-    if (replace && !document.getElementById('instaolvidar-promo-note') && cand.parentNode) cand.parentNode.insertBefore(makeNote(), cand);
+    cand.dataset.letheHidden = '1';
+    if (replace && !document.getElementById('lethe-promo-note') && cand.parentNode) cand.parentNode.insertBefore(makeNote(), cand);
   }
   function scan() {
     if (!document.body) return;

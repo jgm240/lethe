@@ -1,6 +1,6 @@
 {
-  "name": "instaolvidar-browser",
-  "productName": "InstaOlvidar Browser",
+  "name": "lethe",
+  "productName": "Lethe",
   "version": "0.1.0",
   "description": "A privacy-first browser that forgets instantly with DuckDuckGo search, tracker blocking and a Fire Button.",
   "main": "main.js",
@@ -19,20 +19,20 @@
   "dependencies": {
     "tz-lookup": "^6.1.25"
   },
-  "homepage": "https://github.com/jgm240/io-browser",
+  "homepage": "https://github.com/jgm240/lethe",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jgm240/io-browser.git"
+    "url": "git+https://github.com/jgm240/lethe.git"
   },
   "bugs": {
-    "url": "https://github.com/jgm240/io-browser/issues"
+    "url": "https://github.com/jgm240/lethe/issues"
   },
-  "author": "InstaOlvidar Browser contributors",
+  "author": "Lethe contributors",
   "build": {
-    "appId": "io.browser.instaolvidar",
-    "productName": "InstaOlvidar Browser",
-    "copyright": "Copyright \u00a9 2026 InstaOlvidar Browser contributors",
-    "artifactName": "InstaOlvidar-Browser-${version}-${os}-${arch}.${ext}",
+    "appId": "io.github.jgm240.lethe",
+    "productName": "Lethe",
+    "copyright": "Copyright \u00a9 2026 Lethe contributors",
+    "artifactName": "Lethe-${version}-${os}-${arch}.${ext}",
     "directories": {
       "buildResources": "build",
       "output": "dist"
@@ -47,14 +47,14 @@
       "pages/**/*",
       "backgrounds/**/*",
       "build/icon.png",
-      "build/icon.svg",
       "package.json",
       "LICENSE",
       "THIRD_PARTY_NOTICES.md",
-      "!**/*.map"
+      "!**/*.map",
+      "build/icon.svg"
     ],
     "win": {
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -73,14 +73,14 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "InstaOlvidar-Browser-Setup-${version}-${arch}.${ext}"
+      "artifactName": "Lethe-Setup-${version}-${arch}.${ext}"
     },
     "linux": {
       "icon": "build/icon.png",
       "category": "Network;WebBrowser",
       "synopsis": "Privacy-first browser that forgets instantly",
-      "maintainer": "InstaOlvidar Browser contributors <noreply@users.noreply.github.com>",
-      "executableName": "io-browser",
+      "maintainer": "Lethe contributors <noreply@users.noreply.github.com>",
+      "executableName": "lethe",
       "target": [
         {
           "target": "AppImage",

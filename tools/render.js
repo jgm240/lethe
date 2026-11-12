@@ -7,7 +7,7 @@ const fs = require('fs');
 const W = 2560, H = 1440;
 const scenes = process.argv.slice(2).filter(a => /^\d+$/.test(a)).map(Number);
 const todo = scenes.length ? scenes : [1, 2, 3, 4];
-const names = { 1: 'burning-report', 2: 'flying-pages', 3: 'ember-field', 4: 'last-page' };
+const names = { 1: 'thrown', 2: 'downstream', 3: 'sinking', 4: 'mist' };
 
 app.disableHardwareAcceleration();
 app.whenReady().then(async () => {
@@ -15,7 +15,7 @@ app.whenReady().then(async () => {
   fs.mkdirSync(out, { recursive: true });
   for (const n of todo) {
     const win = new BrowserWindow({ width: 800, height: 600, show: false, webPreferences: { backgroundThrottling: false } });
-    await win.loadFile(path.join(__dirname, 'scene.html'), { query: { scene: String(n), w: String(W), h: String(H) } });
+    await win.loadFile(path.join(__dirname, 'river.html'), { query: { scene: String(n), w: String(W), h: String(H) } });
     const t0 = Date.now();
     let data;
     for (;;) {

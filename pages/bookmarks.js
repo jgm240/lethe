@@ -1,5 +1,5 @@
 let all = [];
-async function refresh() { all = await insta.call('bookmarks:list'); render(); }
+async function refresh() { all = await lethe.call('bookmarks:list'); render(); }
 function render() {
   const q = $('filter').value.toLowerCase(), list = $('list');
   list.replaceChildren();
@@ -8,14 +8,14 @@ function render() {
   for (const b of rows) {
     const star = el('button', { className: 'x', textContent: b.favorite ? '★' : '☆', title: 'Favorite (shows on New Tab)' });
     star.style.color = b.favorite ? 'var(--accent)' : ''; star.style.fontSize = '18px';
-    star.onclick = async () => { await insta.call('bookmarks:favorite', b.url); refresh(); };
+    star.onclick = async () => { await lethe.call('bookmarks:favorite', b.url); refresh(); };
     const main = el('div', { className: 'main' }, el('div', { className: 'tt' }, el('a', { href: b.url, textContent: b.title || b.url })), el('div', { className: 'u', textContent: b.url }));
     const del = el('button', { className: 'x', textContent: '✕', title: 'Delete' });
-    del.onclick = async () => { await insta.call('bookmarks:remove', b.url); refresh(); };
+    del.onclick = async () => { await lethe.call('bookmarks:remove', b.url); refresh(); };
     list.append(el('div', { className: 'it' }, star, main, del));
   }
 }
 $('filter').oninput = render;
-$('imp').onclick = async () => { const n = await insta.call('bookmarks:import'); if (n) refresh(); };
-$('exp').onclick = () => insta.call('bookmarks:export');
+$('imp').onclick = async () => { const n = await lethe.call('bookmarks:import'); if (n) refresh(); };
+$('exp').onclick = () => lethe.call('bookmarks:export');
 refresh();

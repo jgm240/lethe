@@ -9,10 +9,10 @@ const ENGINES = {
 };
 
 const BACKGROUNDS = [
-  { id: 'scene3', file: '3-ember-field.jpg', name: 'Into the fire' },
-  { id: 'scene1', file: '1-burning-report.jpg', name: 'Burning report' },
-  { id: 'scene2', file: '2-flying-pages.jpg', name: 'Flying pages' },
-  { id: 'scene4', file: '4-last-page.jpg', name: 'Last page' }
+  { id: 'thrown', file: '1-thrown.jpg', name: 'Thrown in' },
+  { id: 'downstream', file: '2-downstream.jpg', name: 'Downstream' },
+  { id: 'sinking', file: '3-sinking.jpg', name: 'Sinking' },
+  { id: 'mist', file: '4-mist.jpg', name: 'Mist' }
 ];
 
 const LOCATIONS = [
@@ -33,7 +33,7 @@ const DEFAULTS = {
   appearance: {
     preset: 'auto',
     custom: { accent: '#e8663d', bar: '#1f2048', bg: '#14142e' },
-    newtabBackground: 'scene3',
+    newtabBackground: 'thrown',
     showFavorites: true
   },
   privacy: {
@@ -96,7 +96,12 @@ function merge(base, over) {
   }
   return out;
 }
-function load(stored) { return merge(DEFAULTS, stored); }
+function load(stored) {
+  const s = merge(DEFAULTS, stored);
+  const ok = ['none', 'random', ...BACKGROUNDS.map(b => b.id)];
+  if (!ok.includes(s.appearance.newtabBackground)) s.appearance.newtabBackground = 'thrown'; // old artwork ids -> new default
+  return s;
+}
 
 function applySetting(settings, key, value) {
   const validate = SCHEMA[key];

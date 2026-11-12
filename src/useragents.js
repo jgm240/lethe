@@ -2,7 +2,7 @@
 const chromeMajor = () => String(process.versions.chrome || '130').split('.')[0];
 
 const PRESETS = [
-  { id: 'default', name: 'Default (InstaOlvidar / Chromium)' },
+  { id: 'default', name: 'Default (Lethe / Chromium)' },
   { id: 'chrome-win', name: 'Chrome on Windows', platform: 'Win32', vendor: 'Google Inc.', ch: true, chPlatform: 'Windows', ua: v => `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${v}.0.0.0 Safari/537.36` },
   { id: 'chrome-mac', name: 'Chrome on macOS', platform: 'MacIntel', vendor: 'Google Inc.', ch: true, chPlatform: 'macOS', ua: v => `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${v}.0.0.0 Safari/537.36` },
   { id: 'chrome-linux', name: 'Chrome on Linux', platform: 'Linux x86_64', vendor: 'Google Inc.', ch: true, chPlatform: 'Linux', ua: v => `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${v}.0.0.0 Safari/537.36` },

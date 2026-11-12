@@ -1,5 +1,5 @@
 let D;
-const setKey = (key, value) => insta.call('setSetting', { key, value });
+const setKey = (key, value) => lethe.call('setSetting', { key, value });
 const get = (o, path) => path.split('.').reduce((a, k) => a[k], o);
 
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
@@ -13,7 +13,7 @@ function chips(box, list, name) {
   if (!list.length) return box.append(el('span', { className: 'muted', textContent: 'None' }));
   for (const site of list) {
     const x = el('button', { className: 'x', textContent: '✕', title: 'Remove' });
-    x.onclick = async () => { await insta.call('removeSite', { list: name, site }); load(); };
+    x.onclick = async () => { await lethe.call('removeSite', { list: name, site }); load(); };
     box.append(el('span', { className: 'chip' }, site, x));
   }
 }
@@ -82,8 +82,8 @@ function render() {
   chips($('fp'), s.privacy.fireproofSites, 'fireproofSites');
   chips($('up'), s.privacy.unprotectedSites, 'unprotectedSites');
 }
-$('burn').onclick = () => insta.call('fire');
-async function load() { D = await insta.call('getSettings'); applyTheme(D.theme); render(); }
+$('burn').onclick = () => lethe.call('fire');
+async function load() { D = await lethe.call('getSettings'); applyTheme(D.theme); render(); }
 load();
 
 // ---- location map (Leaflet bundled with the app; tiles load from OpenStreetMap only after you open it) ----
@@ -101,8 +101,8 @@ function syncMap() {
 }
 async function pick(ll) {
   const w = ll.wrap();
-  const r = await insta.call('location:pick', { lat: w.lat, lon: w.lng });
-  if (r) { D = await insta.call('getSettings'); render(); marker.setLatLng([r.lat, r.lon]); }
+  const r = await lethe.call('location:pick', { lat: w.lat, lon: w.lng });
+  if (r) { D = await lethe.call('getSettings'); render(); marker.setLatLng([r.lat, r.lon]); }
 }
 function openMap() {
   $('mapBox').style.display = '';

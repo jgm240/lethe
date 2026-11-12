@@ -1,17 +1,17 @@
-# InstaOlvidar Browser
+# Lethe
 
-*Olvídalo al instante — forget instantly.* A privacy-first desktop browser (Windows, Linux, macOS) built on Electron, with DuckDuckGo as the default search engine.
+*Λήθη — forget instantly.* A privacy-first desktop browser (Windows, Linux, macOS) built on Electron, with DuckDuckGo as the default search engine.
 
 > Not affiliated with or endorsed by DuckDuckGo, Google/YouTube, OpenStreetMap or any other company mentioned here. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Features
 - **Protections:** third-party tracker blocking, smarter HTTPS upgrades, Global Privacy Control, third-party cookie blocking, link-tracking parameter removal, a cookie pop-up manager (only ever rejects), per-site protection toggles.
 - **Fire Button** (Ctrl/Cmd+Shift+Backspace): closes every tab and erases history, cookies, cache and site data. Fireproof sites keep their cookies. Optional clear-on-exit.
-- **InstaOlvidar Player:** watch YouTube through its privacy-enhanced embed, without personalized ads. Ask / always / never.
+- **Lethe Player:** watch YouTube through its privacy-enhanced embed, without personalized ads. Ask / always / never.
 - **Themes** (presets + custom colors), New Tab backgrounds, bookmarks with favorites, history, downloads, address-bar suggestions, reopen closed tab.
 - **Content controls:** No CSS, No images, No JavaScript.
 - **Spoof location:** pick a place from a map (time zone follows) and choose a **user agent** (Chrome, Safari, Firefox, iPhone, Android or custom).
-- Internal pages use the `io-browser://` scheme: `io-browser://settings`, `io-browser://history`, `io-browser://bookmarks`, `io-browser://downloads`.
+- Internal pages use the `lethe://` scheme: `lethe://settings`, `lethe://history`, `lethe://bookmarks`, `lethe://downloads`.
 
 ## Install
 Download a build from the [Releases](../../releases) page.

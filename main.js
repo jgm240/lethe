@@ -11,13 +11,13 @@ const { startServer } = require('./src/server');
 const COOKIE_SCRIPT = require('./src/cookiepopups');
 const PROMO = require('./src/promo');
 
-app.setName('InstaOlvidar Browser');
+app.setName('Lethe');
 
-const PARTITION = 'persist:instaolvidar';
+const PARTITION = 'persist:lethe';
 const TOPBAR = 82;
 const FINDBAR = 40;
 const isMac = process.platform === 'darwin';
-const DEV = !app.isPackaged; // test hooks (INSTA_*) only exist in development runs
+const DEV = !app.isPackaged; // test hooks (LETHE_*) only exist in development runs
 const REPO_URL = require('./package.json').homepage || '';
 const ICON = path.join(__dirname, 'build', 'icon.png');
 
@@ -38,7 +38,7 @@ const INTERNAL = { newtab: 'newtab.html', settings: 'settings.html', bookmarks: 
 const isInternal = url => !!ORIGIN && url.startsWith(ORIGIN + '/');
 
 function toReal(url) {
-  const m = /^io-browser:\/\/([a-z]+)(?:\/([\w-]{11}))?(\?.*)?$/i.exec(url);
+  const m = /^lethe:\/\/([a-z]+)(?:\/([\w-]{11}))?(\?.*)?$/i.exec(url);
   if (!m) return url;
   const [, name, id, q] = m;
   if (name === 'player') return `${ORIGIN}/player.html?v=${id || ''}` + (q ? '&' + q.slice(1) : '');
@@ -50,8 +50,8 @@ function toDisplay(url) {
   try {
     const u = new URL(url), n = u.pathname.slice(1).replace('.html', '');
     if (n === 'newtab') return '';
-    if (n === 'player') return `io-browser://player/${u.searchParams.get('v') || ''}`;
-    return `io-browser://${n}${u.search}`;
+    if (n === 'player') return `lethe://player/${u.searchParams.get('v') || ''}`;
+    return `lethe://${n}${u.search}`;
   } catch { return ''; }
 }
 function searchUrl(q) { return ENGINES[settings.general.searchEngine].url + encodeURIComponent(q); }
@@ -59,7 +59,7 @@ function searchUrl(q) { return ENGINES[settings.general.searchEngine].url + enco
 function normalizeInput(text) {
   const t = String(text || '').trim();
   if (!t) return NEWTAB;
-  if (/^io-browser:/i.test(t)) return toReal(t);
+  if (/^lethe:/i.test(t)) return toReal(t);
   if (/^(https?|file|about):/i.test(t)) return t;
   if (!/\s/.test(t) && /^(localhost|(\d{1,3}\.){3}\d{1,3}|([\w-]+\.)+[a-z]{2,})(:\d+)?([/?#]\S*)?$/i.test(t)) {
     const local = /^(localhost|127\.|10\.|192\.168\.)/i.test(t);
@@ -74,7 +74,7 @@ function isLocal(h) {
 }
 const hostOf = u => { try { return new URL(u).hostname; } catch { return ''; } };
 
-// YouTube -> InstaOlvidar Player
+// YouTube -> Lethe Player
 function youtubeTarget(u) {
   const h = u.hostname.replace(/^www\./, '').replace(/^m\./, '');
   let id = null;
@@ -82,7 +82,7 @@ function youtubeTarget(u) {
     if (u.pathname === '/watch') id = u.searchParams.get('v');
     else { const m = /^\/shorts\/([\w-]{11})/.exec(u.pathname); if (m) id = m[1]; }
   } else if (h === 'youtu.be') { const m = /^\/([\w-]{11})/.exec(u.pathname); if (m) id = m[1]; }
-  if (!id || !/^[\w-]{11}$/.test(id) || u.searchParams.has('insta_np')) return null;
+  if (!id || !/^[\w-]{11}$/.test(id) || u.searchParams.has('lethe_np')) return null;
   const t = u.searchParams.get('t') || u.searchParams.get('start');
   let start = 0;
   if (t) { const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(t); if (m) start = (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0); }
@@ -162,7 +162,7 @@ function applyTheme() {
     win.setBackgroundColor(theme.vars.bg);
     win.webContents.send('theme', theme);
     if (suggestView) suggestView.webContents.send('theme', theme);
-    for (const t of tabs) if (isInternal(t.url)) t.view.webContents.send('insta:theme', theme);
+    for (const t of tabs) if (isInternal(t.url)) t.view.webContents.send('lethe:theme', theme);
   }
 }
 
@@ -253,8 +253,8 @@ function recordHistory(tab) {
 
 function ytBanner(url) {
   return `(() => { try {
-    if (document.getElementById('instaolvidar-yt-banner')) return;
-    const host = document.createElement('div'); host.id = 'instaolvidar-yt-banner';
+    if (document.getElementById('lethe-yt-banner')) return;
+    const host = document.createElement('div'); host.id = 'lethe-yt-banner';
     host.style.cssText = 'position:fixed;top:72px;right:16px;z-index:2147483647';
     const sh = host.attachShadow({ mode: 'closed' });
     const box = document.createElement('div');
@@ -293,15 +293,15 @@ function createTab(input, activate = true) {
   });
   wc.on('did-navigate', (_e, u) => {
     tab.url = u;
-    if (isInternal(u)) { tab.title = tab.title === 'New Tab' || !tab.title ? ({ newtab: 'New Tab', settings: 'Settings', bookmarks: 'Bookmarks', history: 'History', downloads: 'Downloads', player: 'InstaOlvidar Player' }[toDisplay(u).replace('io-browser://', '').split(/[/?]/)[0]] || 'InstaOlvidar') : tab.title; wc.send('insta:theme', theme); }
+    if (isInternal(u)) { tab.title = tab.title === 'New Tab' || !tab.title ? ({ newtab: 'New Tab', settings: 'Settings', bookmarks: 'Bookmarks', history: 'History', downloads: 'Downloads', player: 'Lethe Player' }[toDisplay(u).replace('lethe://', '').split(/[/?]/)[0]] || 'Lethe') : tab.title; wc.send('lethe:theme', theme); }
     pushState();
   });
   wc.on('did-navigate-in-page', (_e, u, isMain) => { if (isMain) { tab.url = u; pushState(); maybeBanner(wc, u); } });
   wc.on('dom-ready', () => {
     const u = wc.getURL();
-    if (isInternal(u)) { wc.send('insta:theme', theme); return; }
+    if (isInternal(u)) { wc.send('lethe:theme', theme); return; }
     if (settings.content.noJs) return;
-    if (settings.general.hideSearchPromos && !(DEV && process.env.INSTA_NO_HIDE) && /^https:\/\/([\w-]+\.)?duckduckgo\.com\//.test(u)) {
+    if (settings.general.hideSearchPromos && !(DEV && process.env.LETHE_NO_HIDE) && /^https:\/\/([\w-]+\.)?duckduckgo\.com\//.test(u)) {
       wc.insertCSS(PROMO.CSS).catch(() => {});
       wc.executeJavaScript(PROMO.JS).catch(() => {});
     }
@@ -383,7 +383,7 @@ function closeTab(id) {
 function reopenTab() { const c = closedTabs.pop(); if (c) createTab(c.url, true); }
 function cycleTab(dir) { const i = tabs.findIndex(t => t.id === activeId); activateTab(tabs[(i + dir + tabs.length) % tabs.length].id); }
 function openInternal(name) {
-  const url = toReal(`io-browser://${name}`);
+  const url = toReal(`lethe://${name}`);
   const existing = tabs.find(t => t.url === url || t.url.startsWith(url + '?'));
   if (existing) activateTab(existing.id); else createTab(url, true);
 }
@@ -429,7 +429,7 @@ async function fire() {
 // ---------- privacy engine ----------
 function setupPrivacy() {
   ses = session.fromPartition(PARTITION);
-  BASE_UA = ses.getUserAgent().replace(/\s(Electron|instaolvidar-browser|InstaOlvidar[^/]*)\/\S+/gi, '');
+  BASE_UA = ses.getUserAgent().replace(/\s(Electron|lethe|Lethe[^/]*)\/\S+/gi, '');
   applyUserAgent();
 
   ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (d, cb) => {
@@ -443,7 +443,7 @@ function setupPrivacy() {
     const prot = isProtected(main ? u.hostname : pageHost);
 
     if (main) {
-      // InstaOlvidar Player
+      // Lethe Player
       if (settings.player.mode === 'always') { const yt = youtubeTarget(u); if (yt) return cb({ redirectURL: yt.url }); }
       // Link tracking protection
       if (settings.privacy.stripTrackingParams && prot) {
@@ -475,9 +475,9 @@ function setupPrivacy() {
       if (l === 'sec-ch-ua-platform') h[k] = `"${curUA.chPlatform}"`;
       else if (l === 'sec-ch-ua-mobile') h[k] = curUA.mobile ? '?1' : '?0';
     }
-    if (d.url.startsWith('https://tile.openstreetmap.org/')) h['User-Agent'] = `InstaOlvidar-Browser/${app.getVersion()}` + (REPO_URL ? ` (+${REPO_URL})` : ''); // OSM tile policy: identify the app
+    if (d.url.startsWith('https://tile.openstreetmap.org/')) h['User-Agent'] = `Lethe/${app.getVersion()}` + (REPO_URL ? ` (+${REPO_URL})` : ''); // OSM tile policy: identify the app
     if (settings.privacy.gpc && !d.url.startsWith(ORIGIN)) { h['Sec-GPC'] = '1'; h['DNT'] = '1'; }
-    if (settings.general.ddgBrowserHint && !(DEV && process.env.INSTA_NO_HINT)) { try { if (isDdgHost(new URL(d.url).hostname)) h['User-Agent'] = DDG_UA; } catch { /* ignore */ } }
+    if (settings.general.ddgBrowserHint && !(DEV && process.env.LETHE_NO_HINT)) { try { if (isDdgHost(new URL(d.url).hostname)) h['User-Agent'] = DDG_UA; } catch { /* ignore */ } }
     const refKey = Object.keys(h).find(k => k.toLowerCase() === 'referer');
     if (refKey) {
       try {
@@ -550,7 +550,7 @@ function popupMenu(kind) {
   if (kind === 'shield') {
     const hosts = Object.entries(t.blockedHosts).sort((a, b) => b[1] - a[1]).slice(0, 6);
     tpl = [
-      { label: internal ? 'InstaOlvidar page' : t.url.startsWith('https:') ? 'Connection is encrypted (HTTPS)' : 'Connection is not encrypted', enabled: false },
+      { label: internal ? 'Lethe page' : t.url.startsWith('https:') ? 'Connection is encrypted (HTTPS)' : 'Connection is not encrypted', enabled: false },
       { label: `${t.blocked} tracker request${t.blocked === 1 ? '' : 's'} blocked`, enabled: false },
       ...hosts.map(([h, n]) => ({ label: `    ${h} — ${n}`, enabled: false })),
       ...(t.stripped ? [{ label: `${t.stripped} tracking parameter redirect${t.stripped === 1 ? '' : 's'} cleaned`, enabled: false }] : []),
@@ -591,7 +591,7 @@ function popupMenu(kind) {
       { label: 'Developer Tools', click: () => t.view.webContents.openDevTools({ mode: 'detach' }) },
       { label: 'Burn All Tabs and Data…', click: fire },
       { type: 'separator' },
-      { label: 'About InstaOlvidar Browser', click: () => dialog.showMessageBox(win, { message: 'InstaOlvidar Browser', detail: `Version ${app.getVersion()}\nOlvídalo al instante — forget instantly.\nPrivate by default. Search powered by DuckDuckGo.` }) }
+      { label: 'About Lethe', click: () => dialog.showMessageBox(win, { message: 'Lethe', detail: `Version ${app.getVersion()}\nΛήθη — forget instantly.\nPrivate by default. Search powered by DuckDuckGo.` }) }
     ];
   }
   Menu.buildFromTemplate(tpl).popup({ window: win });
@@ -600,7 +600,7 @@ function popupMenu(kind) {
 function buildAppMenu() {
   const nav = () => activeTab().view.webContents;
   const tpl = [
-    ...(isMac ? [{ label: 'InstaOlvidar', submenu: [{ role: 'about' }, { type: 'separator' }, { label: 'Settings…', accelerator: 'Cmd+,', click: () => openInternal('settings') }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }] : []),
+    ...(isMac ? [{ label: 'Lethe', submenu: [{ role: 'about' }, { type: 'separator' }, { label: 'Settings…', accelerator: 'Cmd+,', click: () => openInternal('settings') }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }] : []),
     {
       label: 'File',
       submenu: [
@@ -673,7 +673,7 @@ async function importBookmarks() {
   return n;
 }
 async function exportBookmarks() {
-  const r = await dialog.showSaveDialog(win, { title: 'Export bookmarks', defaultPath: 'instaolvidar-bookmarks.html', filters: [{ name: 'Bookmarks (HTML)', extensions: ['html'] }] });
+  const r = await dialog.showSaveDialog(win, { title: 'Export bookmarks', defaultPath: 'lethe-bookmarks.html', filters: [{ name: 'Bookmarks (HTML)', extensions: ['html'] }] });
   if (r.canceled || !r.filePath) return false;
   const body = bookmarks.map(b => `    <DT><A HREF="${esc(b.url)}">${esc(b.title || b.url)}</A>`).join('\n');
   fs.writeFileSync(r.filePath, `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n${body}\n</DL><p>\n`);
@@ -721,10 +721,10 @@ ipcMain.on('cmd', (_e, name, arg) => {
 });
 
 // ---------- IPC: internal pages ----------
-ipcMain.on('insta:origin', e => { e.returnValue = ORIGIN; });
+ipcMain.on('lethe:origin', e => { e.returnValue = ORIGIN; });
 // Lets the page preload ask for the DuckDuckGo-browser UA (only ever used on duckduckgo.com pages).
-ipcMain.on('insta:uaInfo', e => { e.returnValue = curUA.spoofed ? { ua: curUA.ua, platform: curUA.platform || '', vendor: curUA.vendor || '', hideCH: curUA.hideCH, chromeMajor: curUA.chromeMajor || 0, chPlatform: curUA.chPlatform || '', mobile: !!curUA.mobile } : null; });
-ipcMain.on('insta:ddgHint', e => { e.returnValue = settings.general.ddgBrowserHint && !(DEV && process.env.INSTA_NO_HINT) ? DDG_UA : ''; });
+ipcMain.on('lethe:uaInfo', e => { e.returnValue = curUA.spoofed ? { ua: curUA.ua, platform: curUA.platform || '', vendor: curUA.vendor || '', hideCH: curUA.hideCH, chromeMajor: curUA.chromeMajor || 0, chPlatform: curUA.chPlatform || '', mobile: !!curUA.mobile } : null; });
+ipcMain.on('lethe:ddgHint', e => { e.returnValue = settings.general.ddgBrowserHint && !(DEV && process.env.LETHE_NO_HINT) ? DDG_UA : ''; });
 
 const handlers = {
   getSettings: () => ({
@@ -782,7 +782,7 @@ const handlers = {
   }
 };
 
-ipcMain.handle('insta:call', async (e, name, arg) => {
+ipcMain.handle('lethe:call', async (e, name, arg) => {
   const f = e.senderFrame;
   if (!f || f !== e.sender.mainFrame || !f.url.startsWith(ORIGIN + '/')) throw new Error('forbidden');
   const h = handlers[name];
@@ -793,7 +793,7 @@ ipcMain.handle('insta:call', async (e, name, arg) => {
 // ---------- window ----------
 function createWindow() {
   win = new BrowserWindow({
-    width: 1280, height: 820, minWidth: 600, minHeight: 400, title: 'InstaOlvidar Browser', icon: ICON,
+    width: 1280, height: 820, minWidth: 600, minHeight: 400, title: 'Lethe', icon: ICON,
     backgroundColor: theme.vars.bg,
     ...(isMac ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 12 } } : { autoHideMenuBar: true }),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true }
@@ -811,30 +811,45 @@ function createWindow() {
   win.on('closed', () => { win = null; tabs = []; });
   win.webContents.once('did-finish-load', () => {
     win.webContents.send('theme', theme);
-    const arg = process.argv.slice(app.isPackaged ? 1 : 2).find(a => /^(https?|insta):/i.test(a));
-    createTab((DEV && process.env.INSTA_OPEN) || arg);
-    if ((DEV && process.env.INSTA_SHOTS)) devShots((DEV && process.env.INSTA_SHOTS));
+    const arg = process.argv.slice(app.isPackaged ? 1 : 2).find(a => /^(https?|lethe):/i.test(a));
+    createTab((DEV && process.env.LETHE_OPEN) || arg);
+    if ((DEV && process.env.LETHE_SHOTS)) devShots((DEV && process.env.LETHE_SHOTS));
   });
 }
 
-// Developer hook: INSTA_SHOTS=<dir> saves screenshots of the chrome and active tab, then quits.
+// Developer hook: LETHE_SHOTS=<dir> saves screenshots of the chrome and active tab, then quits.
 async function devShots(dir) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   fs.mkdirSync(dir, { recursive: true });
-  await wait(+(DEV && process.env.INSTA_WAIT) || 5000);
+  await wait(+(DEV && process.env.LETHE_WAIT) || 5000);
   fs.writeFileSync(path.join(dir, 'chrome.png'), (await win.webContents.capturePage()).toPNG());
   const t = activeTab();
-  if (t && (DEV && process.env.INSTA_EVAL)) { try { console.log('EVAL', JSON.stringify(await t.view.webContents.executeJavaScript((DEV && process.env.INSTA_EVAL)))); } catch (e) { console.log('EVAL_ERR', String(e)); } }
+  if (t && (DEV && process.env.LETHE_EVAL)) { try { console.log('EVAL', JSON.stringify(await t.view.webContents.executeJavaScript((DEV && process.env.LETHE_EVAL)))); } catch (e) { console.log('EVAL_ERR', String(e)); } }
   if (t) fs.writeFileSync(path.join(dir, 'tab.png'), (await t.view.webContents.capturePage()).toPNG());
   console.log('TABS', JSON.stringify(tabs.map(x => ({ title: x.title, url: x.url, blocked: x.blocked }))));
   quitting = true; firedOnExit = true; app.quit();
 }
 
+// One-time migration: copy settings, bookmarks and history from the app's previous name.
+// (Cookies and site data are deliberately not migrated: this browser is meant to forget.)
+function migrateLegacyData() {
+  try {
+    const old = path.join(app.getPath('appData'), 'InstaOlvidar Browser');
+    const cur = app.getPath('userData');
+    if (fs.existsSync(path.join(cur, 'settings.json')) || !fs.existsSync(path.join(old, 'settings.json'))) return;
+    fs.mkdirSync(cur, { recursive: true });
+    for (const f of ['settings.json', 'bookmarks.json', 'history.json']) {
+      if (fs.existsSync(path.join(old, f))) fs.copyFileSync(path.join(old, f), path.join(cur, f));
+    }
+  } catch { /* start fresh */ }
+}
+
 app.whenReady().then(async () => {
   const srv = await startServer(__dirname);
   ORIGIN = srv.origin; NEWTAB = ORIGIN + '/newtab.html';
+  migrateLegacyData();
   settings = loadSettings(loadJSON('settings', {}));
-  if ((DEV && process.env.INSTA_SETTINGS)) { try { const o = JSON.parse((DEV && process.env.INSTA_SETTINGS)); for (const [sec, vals] of Object.entries(o)) Object.assign(settings[sec], vals); } catch { /* ignore */ } }
+  if ((DEV && process.env.LETHE_SETTINGS)) { try { const o = JSON.parse((DEV && process.env.LETHE_SETTINGS)); for (const [sec, vals] of Object.entries(o)) Object.assign(settings[sec], vals); } catch { /* ignore */ } }
   bookmarks = loadJSON('bookmarks', []);
   history = loadJSON('history', []);
   if (isMac && app.dock) app.dock.setIcon(ICON);

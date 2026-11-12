@@ -30,7 +30,7 @@
 <nav><h1>Settings</h1>
   <button data-s="general" class="on">General</button><button data-s="appearance">Appearance</button><button data-s="privacy">Privacy</button>
   <button data-s="content">Content &amp; Location</button>
-  <button data-s="player">InstaOlvidar Player</button><button data-s="data">Data</button><button data-s="about">About</button></nav>
+  <button data-s="player">Lethe Player</button><button data-s="data">Data</button><button data-s="about">About</button></nav>
 <main>
 <section id="general" class="on"><h1>General</h1>
   <div class="card">
@@ -59,7 +59,7 @@
     <div class="row"><div class="txt"><div class="t">Save browsing history</div><div class="d">Stored on this device only.</div></div><label class="switch"><input type="checkbox" data-k="privacy.saveHistory"><span></span></label></div>
   </div>
   <h2>Fire Button</h2><div class="card">
-    <div class="row"><div class="txt"><div class="t">Burn data when InstaOlvidar closes</div><div class="d">Automatically erases history, cookies and site data on quit.</div></div><label class="switch"><input type="checkbox" data-k="privacy.fireOnExit"><span></span></label></div>
+    <div class="row"><div class="txt"><div class="t">Burn data when Lethe closes</div><div class="d">Automatically erases history, cookies and site data on quit.</div></div><label class="switch"><input type="checkbox" data-k="privacy.fireOnExit"><span></span></label></div>
     <div class="row"><div class="txt"><div class="t">Burn everything now</div><div class="d">Closes all tabs and erases data (fireproof sites keep their cookies).</div></div><button class="btn danger" id="burn">Burn…</button></div>
   </div>
   <h2>Fireproof sites</h2><div class="card"><div class="row"><div class="txt"><div class="d" style="margin:0 0 6px">These sites keep their cookies (so you stay signed in) when you use the Fire Button. Add one from the shield menu.</div><div id="fp"></div></div></div></div>
@@ -70,7 +70,7 @@
   <div class="card">
     <div class="row"><div class="txt"><div class="t">No CSS</div><div class="d">Loads pages without any site styling, so you see plain, readable HTML. Blocks stylesheets, inline styles and style attributes.</div></div><label class="switch"><input type="checkbox" data-k="content.noCss"><span></span></label></div>
     <div class="row"><div class="txt"><div class="t">No images</div><div class="d">Doesn't load images, which saves data and removes image-based tracking pixels.</div></div><label class="switch"><input type="checkbox" data-k="content.noImages"><span></span></label></div>
-    <div class="row"><div class="txt"><div class="t">No JavaScript</div><div class="d">Blocks all scripts on websites. Many sites (logins, video, maps, search suggestions) won't work. Applies to every site; the InstaOlvidar Player and these settings pages are not affected.</div></div><label class="switch"><input type="checkbox" data-k="content.noJs"><span></span></label></div>
+    <div class="row"><div class="txt"><div class="t">No JavaScript</div><div class="d">Blocks all scripts on websites. Many sites (logins, video, maps, search suggestions) won't work. Applies to every site; the Lethe Player and these settings pages are not affected.</div></div><label class="switch"><input type="checkbox" data-k="content.noJs"><span></span></label></div>
   </div>
   <div class="muted" style="font-size:13px;margin:-6px 0 8px">Changes apply the next time a page loads. The ⋯ menu has quick toggles under “Page Content”.</div>
   <h2>Location</h2>
@@ -91,7 +91,7 @@
     <div class="row" style="display:block"><div class="t">Currently sending</div><code class="ua" id="uaCurrent"></code></div>
   </div>
 </section>
-<section id="player"><h1>InstaOlvidar Player</h1>
+<section id="player"><h1>Lethe Player</h1>
   <div class="card">
     <div class="row"><div class="txt"><div class="t">YouTube videos</div><div class="d">Watch YouTube in a clean player that uses YouTube's privacy-enhanced mode: no tracking cookies, no personalized ads, and our tracker blocking stays on.</div></div>
       <select id="pm"><option value="ask">Ask me each time</option><option value="always">Always use the Player</option><option value="never">Never use the Player</option></select></div>
@@ -99,15 +99,15 @@
 </section>
 <section id="data"><h1>Data</h1>
   <div class="card">
-    <div class="row"><div class="txt"><div class="t">Bookmarks</div><div class="d">Manage, import or export your bookmarks.</div></div><a class="btn" href="io-browser://bookmarks">Open</a></div>
-    <div class="row"><div class="txt"><div class="t">History</div></div><a class="btn" href="io-browser://history">Open</a></div>
-    <div class="row"><div class="txt"><div class="t">Downloads</div></div><a class="btn" href="io-browser://downloads">Open</a></div>
+    <div class="row"><div class="txt"><div class="t">Bookmarks</div><div class="d">Manage, import or export your bookmarks.</div></div><a class="btn" href="lethe://bookmarks">Open</a></div>
+    <div class="row"><div class="txt"><div class="t">History</div></div><a class="btn" href="lethe://history">Open</a></div>
+    <div class="row"><div class="txt"><div class="t">Downloads</div></div><a class="btn" href="lethe://downloads">Open</a></div>
   </div>
 </section>
 <section id="about"><h1>About</h1>
-  <div class="card"><div class="row"><div class="txt"><div class="t">InstaOlvidar Browser <span class="muted" id="ver"></span></div><div class="d">Olvídalo al instante — forget instantly.</div></div></div></div>
+  <div class="card"><div class="row"><div class="txt"><div class="t">Lethe <span class="muted" id="ver"></span></div><div class="d">Λήθη — forget instantly.</div></div></div></div>
   <h2>What's inside</h2>
-  <ul class="feat"><li>Tracker blocking</li><li>Smarter HTTPS upgrades</li><li>Global Privacy Control</li><li>Third-party cookie blocking</li><li>Link tracking protection</li><li>Cookie pop-up manager</li><li>Fire Button + fireproof sites</li><li>Clear on exit</li><li>InstaOlvidar Player for YouTube</li><li>Per-site protection toggle</li><li>Themes + custom colors</li><li>Search suggestions</li><li>Bookmarks, history, downloads</li><li>Reopen closed tab</li></ul>
+  <ul class="feat"><li>Tracker blocking</li><li>Smarter HTTPS upgrades</li><li>Global Privacy Control</li><li>Third-party cookie blocking</li><li>Link tracking protection</li><li>Cookie pop-up manager</li><li>Fire Button + fireproof sites</li><li>Clear on exit</li><li>Lethe Player for YouTube</li><li>Per-site protection toggle</li><li>Themes + custom colors</li><li>Search suggestions</li><li>Bookmarks, history, downloads</li><li>Reopen closed tab</li></ul>
 </section>
 </main></div>
 <script src="common.js"></script><script src="leaflet.js"></script><script src="settings.js"></script></body></html>

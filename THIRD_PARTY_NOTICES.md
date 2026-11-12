@@ -1,6 +1,6 @@
 # Third-party notices
 
-InstaOlvidar Browser's own code is MIT-licensed (see `LICENSE`). It is built on, and ships with, the following.
+Lethe's own code is MIT-licensed (see `LICENSE`). It is built on, and ships with, the following.
 
 ## Electron and Chromium
 - **Electron** — MIT License, © Electron contributors and GitHub Inc. Packaged builds include `LICENSE.electron.txt`.
@@ -14,7 +14,7 @@ InstaOlvidar Browser's own code is MIT-licensed (see `LICENSE`). It is built on,
 
 ## Services contacted at the user's request
 - **OpenStreetMap** map tiles (© OpenStreetMap contributors, ODbL), loaded only while the location map in Settings is open, under the [OSMF tile usage policy](https://operations.osmfoundation.org/policies/tiles/). Tile requests identify this app in the `User-Agent`. If this project is distributed widely, consider hosting or licensing your own tile source.
-- **DuckDuckGo** search and search suggestions, **YouTube** (privacy-enhanced embed and oEmbed title lookup, used by the InstaOlvidar Player).
+- **DuckDuckGo** search and search suggestions, **YouTube** (privacy-enhanced embed and oEmbed title lookup, used by the Lethe Player).
 
 ## Trademarks
-DuckDuckGo, YouTube, OpenStreetMap, Chromium, Electron, Windows, Linux and other product names are trademarks of their respective owners. InstaOlvidar Browser is an independent project and is **not affiliated with, endorsed by, or sponsored by** any of them. The app icon and background artwork are original works of this project.
+DuckDuckGo, YouTube, OpenStreetMap, Chromium, Electron, Windows, Linux and other product names are trademarks of their respective owners. Lethe is an independent project and is **not affiliated with, endorsed by, or sponsored by** any of them. The app icon and background artwork are original works of this project.

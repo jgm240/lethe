@@ -1,5 +1,5 @@
 // Tiny loopback-only static server for the browser's internal pages (settings, new tab, player...).
-// Serving over http://127.0.0.1 (instead of file://) gives the InstaOlvidar Player a real HTTP origin,
+// Serving over http://127.0.0.1 (instead of file://) gives the Lethe Player a real HTTP origin,
 // which YouTube's privacy-enhanced embed requires.
 const http = require('http');
 const fs = require('fs');

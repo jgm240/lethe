@@ -233,6 +233,7 @@ function pushState() {
     tabs: tabs.map(x => ({ id: x.id, title: x.title, favicon: x.favicon, loading: x.loading, pinned: !!x.pinned, group: x.group })),
     groups: groups.map(g => ({ id: g.id, name: g.name, color: g.color, collapsed: !!g.collapsed })),
     layout: settings.tabs.layout,
+    canal: canal(),
     activeId,
     url,
     secure: !!t && (real.startsWith('https:') || isInternal(real)),
@@ -293,7 +294,7 @@ async function updateSuggest(text, rect) {
 
 // ---------- tabs ----------
 function recordHistory(tab) {
-  if (!settings.privacy.saveHistory || !/^https?:/.test(tab.url) || isInternal(tab.url)) return;
+  if (canal() || !settings.privacy.saveHistory || !/^https?:/.test(tab.url) || isInternal(tab.url)) return;
   const last = history[0];
   if (last && last.url === tab.url && Date.now() - last.time < 60000) { last.title = tab.title; return; }
   history.unshift({ url: tab.url, title: tab.title, time: Date.now() });
@@ -432,7 +433,7 @@ function closeTab(id) {
   const i = tabs.findIndex(t => t.id === id);
   if (i < 0) return;
   const [tab] = tabs.splice(i, 1);
-  if (/^https?:/.test(tab.url) || (isInternal(tab.url) && tab.url !== NEWTAB)) { closedTabs.push({ url: tab.url, title: tab.title }); if (closedTabs.length > 20) closedTabs.shift(); }
+  if (!canal() && (/^https?:/.test(tab.url) || (isInternal(tab.url) && tab.url !== NEWTAB))) { closedTabs.push({ url: tab.url, title: tab.title }); if (closedTabs.length > 20) closedTabs.shift(); }
   try { win.contentView.removeChildView(tab.view); } catch { /* ignore */ }
   tab.view.webContents.close();
   groups = groups.filter(g => tabs.some(t => t.group === g.id));
@@ -514,7 +515,7 @@ function noteVisit(tab, url) {
   tab.sites.add(site);
   persistVisits();
 }
-function persistVisits() { if (settings.privacy.saveHistory || settings.forget.afterHours > 0) saveJSON('visits', visits); }
+function persistVisits() { if (!canal() && (settings.privacy.saveHistory || settings.forget.afterHours > 0)) saveJSON('visits', visits); }
 
 async function clearAllData() {
   const keep = new Set(settings.privacy.fireproofSites);
@@ -578,10 +579,41 @@ async function forgetStale() {
   for (const [site, v] of Object.entries(visits)) if (v.t < cutoff && !open.has(site) && !fireproof(site) && await forgetSite(site)) n++;
   return n;
 }
+// ---- Canal to Lethe: a standing mode where everything flows away as you go ----
+// Nothing is recorded (history, closed tabs, downloads list, visited-site list). A site's cookies, storage and
+// cache are erased the moment no tab shows it, a sweep catches stragglers, and the whole profile is wiped
+// on launch and on quit. Fireproof sites are the only exception, exactly as with Eject.
+function canal() { return !!(settings && settings.forget.canal); }
+let canalBusy = false;
+async function canalSweep() {
+  if (!canal() || canalBusy) return 0;
+  canalBusy = true;
+  try {
+    const open = new Set(tabs.map(t => siteOf(hostOf(t.url))).filter(Boolean));
+    const sites = new Set(Object.keys(visits));
+    for (const c of await ses.cookies.get({})) sites.add(siteOf((c.domain || '').replace(/^\./, '')));
+    let n = 0;
+    for (const site of sites) if (site && !open.has(site) && !fireproof(site) && await forgetSite(site)) n++;
+    if (n) { await ses.clearCache(); await ses.clearAuthCache(); }
+    return n;
+  } finally { canalBusy = false; }
+}
+async function canalStart() {
+  if (!canal()) return;
+  history = []; downloads = []; closedTabs = [];
+  saveJSONNow('history', history); saveJSONNow('visits', {});
+  await canalSweep();
+  toast('Canal to Lethe is open — nothing you do is kept');
+}
+function setCanal(on) {
+  applySetting(settings, 'forget.canal', !!on); saveJSON('settings', settings);
+  if (on) canalStart().catch(() => {}); else toast('Canal to Lethe closed — normal history rules apply');
+  pushState();
+}
 // "Forget when the tab closes" rule.
 function maybeForgetClosedSites(sites) {
   for (const site of sites) {
-    if (settings.forget.onCloseSites.includes(site) && !tabs.some(t => siteOf(hostOf(t.url)) === site)) forgetSite(site).catch(() => {});
+    if ((canal() || settings.forget.onCloseSites.includes(site)) && !tabs.some(t => siteOf(hostOf(t.url)) === site) && !(canal() && fireproof(site))) forgetSite(site).catch(() => {});
   }
 }
 
@@ -831,7 +863,7 @@ function setupPrivacy() {
   let dlId = 1;
   ses.on('will-download', (_e, item) => {
     const rec = { id: dlId++, name: item.getFilename(), url: item.getURL(), state: 'progressing', received: 0, total: item.getTotalBytes(), path: '', time: Date.now() };
-    downloads.unshift(rec);
+    if (!canal()) downloads.unshift(rec);
     item.on('updated', () => { rec.received = item.getReceivedBytes(); rec.total = item.getTotalBytes(); rec.path = item.getSavePath(); });
     item.once('done', (_ev, state) => { rec.state = state; rec.path = item.getSavePath(); rec.received = item.getReceivedBytes(); });
   });
@@ -999,6 +1031,7 @@ function ejectMenu() {
   const site = currentSite();
   Menu.buildFromTemplate([
     { label: 'Eject to Lethe…  (close all tabs, erase everything)', accelerator: 'CmdOrCtrl+Shift+Backspace', click: () => eject('all') },
+    { label: 'Canal to Lethe  (forget everything as I go)', type: 'checkbox', checked: canal(), click: () => setCanal(!canal()) },
     { type: 'separator' },
     { label: 'Forget the last hour', click: () => eject('hour') },
     { label: 'Forget the last day', click: () => eject('day') },
@@ -1026,6 +1059,7 @@ function buildPaletteItems() {
   act('Downloads', '', () => openInternal('downloads'));
   act('Privacy Report', 'last 7 days', () => openInternal('report'));
   act('Eject to Lethe…', 'erase everything', () => eject('all'));
+  act(`Canal to Lethe (${canal() ? 'on' : 'off'}) — toggle`, 'forget everything as you go', () => setCanal(!canal()));
   act('Forget the last hour', '', () => eject('hour'));
   act('Forget the last day', '', () => eject('day'));
   if (currentSite()) act(`Forget ${currentSite()} only`, '', () => eject('site'));
@@ -1156,6 +1190,7 @@ const handlers = {
     if (key.startsWith('userAgent.')) { applyUserAgent(); applyUAAll(); }
     if (key.startsWith('location.')) applyLocationAll();
     if (key === 'tabs.layout') layout();
+    if (key === 'forget.canal') { if (value) canalStart().catch(() => {}); }
     if (key.startsWith('forget.')) persistVisits();
     saveJSON('settings', settings);
     if (key.startsWith('appearance.preset') || key.startsWith('appearance.custom')) applyTheme();
@@ -1335,14 +1370,16 @@ app.whenReady().then(async () => {
   buildAppMenu();
   createWindow();
   setInterval(() => forgetStale().catch(() => {}), 10 * 60 * 1000);
+  setInterval(() => canalSweep().catch(() => {}), 30 * 1000);
+  if (canal()) setTimeout(() => canalStart().catch(() => {}), 1500);
   setTimeout(() => { forgetStale().catch(() => {}); updateFilterLists(true).catch(() => {}); }, 25000);
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 
 app.on('before-quit', e => {
   saveJSONNow('settings', settings); saveJSONNow('bookmarks', bookmarks); saveJSONNow('history', history); saveJSONNow('zapped', zapped);
-  if (settings && (settings.privacy.saveHistory || settings.forget.afterHours > 0)) saveJSONNow('visits', visits);
-  if (settings && settings.privacy.fireOnExit && !firedOnExit && !quitting) {
+  if (settings && !canal() && (settings.privacy.saveHistory || settings.forget.afterHours > 0)) saveJSONNow('visits', visits);
+  if (settings && (settings.privacy.fireOnExit || canal()) && !firedOnExit && !quitting) {
     e.preventDefault(); quitting = true;
     clearAllData().catch(() => {}).finally(() => { firedOnExit = true; app.quit(); });
   }

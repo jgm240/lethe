@@ -93,6 +93,7 @@ $('forward').onclick = () => lin.cmd('forward');
 $('reload').onclick = () => lin.cmd('reload');
 $('newtab').onclick = () => lin.cmd('new-tab');
 $('fire').onclick = () => lin.cmd('eject-menu');
+lin.onState(s => { $('fire').classList.toggle('canal', !!s.canal); $('fire').title = s.canal ? 'Canal to Lethe is open — everything is forgotten as you go' : 'Eject to Lethe — forget everything'; });
 $('star').onclick = () => lin.cmd('bookmark');
 $('shield').onclick = () => lin.cmd('menu', 'shield');
 $('bookmarks').onclick = () => lin.cmd('menu', 'bookmarks');
